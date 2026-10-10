@@ -48,7 +48,11 @@ internal static class Program
         SetWindowHitTest(window.Handle, _hitTest, nint.Zero);
 
         var web = NativeWebView.Create(new NativeWebViewOptions { UserDataFolder = PlayerSettings.WebProfileFolder });
-        web.AddScriptAtDocumentStart(LoadTweaksScript());
+        // Not awaited: registered before the attach, it completes only after it, and the first
+        // navigation waits for it anyway. Watched only so a refusal is not silent.
+        web.AddScriptAtDocumentStartAsync(LoadTweaksScript()).ContinueWith(
+            t => Console.Error.WriteLine($"[tweaks] not registered: {t.Exception?.GetBaseException().Message}"),
+            CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
         web.MessageReceived += json => UiQueue.Enqueue(() => OnPageMessage(json, web, compact));
         web.TitleChanged += title => UiQueue.Enqueue(() => window.SetTitle(TitleFor(title)));
         web.PageError += error => Console.Error.WriteLine($"[page] {error}");

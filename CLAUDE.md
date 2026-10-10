@@ -7,7 +7,7 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   placed below the strip, and SDL's hit test for move and resize.
 - `PipLayout.cs` is the geometry, in WINDOW POINTS; the web view and the renderer are in pixels, so convert
   with `pixelWidth / layout.Width`. Draw and hit test both read `PipLayout`, so they cannot disagree.
-- `Scripts/yt-tweaks.js` runs at document start on every page (`INativeWebView.AddScriptAtDocumentStart`):
+- `Scripts/yt-tweaks.js` runs at document start on every page (`INativeWebView.AddScriptAtDocumentStartAsync`):
   Shorts hiding, the Shorts redirect, compact mode. Host and page talk through `chrome.webview` messages
   (`{ready}` from the page, `{compact}` from the host).
 - On Linux the web view's events arrive on the GTK thread: anything that touches the window goes through
