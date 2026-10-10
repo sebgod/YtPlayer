@@ -23,3 +23,6 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   `UiQueue`, drained on the loop thread.
 - Renderer gaps get fixed upstream in SdlVulkan.Renderer, not worked around here.
 - Package versions live in `Directory.Packages.props` (central package management).
+- Releases: a `v*` tag on main runs `.github/workflows/release.yml`, which AOT-publishes win-x64 and win-arm64
+  and attaches the zips to the tag's GitHub Release. The version comes from the tag (`-p:Version`), not
+  from the project.

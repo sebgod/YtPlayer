@@ -1,0 +1,110 @@
+name: Release
+
+# Pushing a tag v<major>.<minor>.<patch> (a -suffix makes it a prerelease) publishes the Windows builds,
+# native AOT for x64 and arm64, as that tag's GitHub Release: one zip per architecture, and one with its
+# symbols. Run by hand (workflow_dispatch, any branch), or on a pull request that changes what the publish
+# depends on, it only tries the publish: the zips are left as the run's artifacts and nothing is released.
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - src/YtPlayer/YtPlayer.csproj
+      - Directory.Build.props
+      - Directory.Packages.props
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: 1
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # main's history, for the check below
+      - name: Version from the tag
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            if ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::$GITHUB_REF_NAME is not v<major>.<minor>.<patch>"; exit 1
+            fi
+            # A release is of main: a tag on a branch's commit would ship what main never had.
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+              echo "::error::$GITHUB_REF_NAME is not on main"; exit 1
+            fi
+          else
+            version="0.0.0-ci.$GITHUB_RUN_NUMBER"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Test
+        run: dotnet test --project tests/YtPlayer.Tests -c Release
+
+  publish:
+    needs: check
+    strategy:
+      matrix:
+        rid: [win-x64, win-arm64]   # arm64 is cross-compiled on the x64 runner
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish (native AOT)
+        run: dotnet publish src/YtPlayer -f net10.0-windows -r ${{ matrix.rid }} -c Release -p:Version=${{ env.VERSION }} -o publish
+      # The exe alone cannot start: SDL3.dll is the window, and WebView2Loader.dll the page (without it
+      # the window opens on a web view that fails at attach). A zip that lost either would look fine.
+      - name: Zip
+        shell: pwsh
+        run: |
+          foreach ($file in 'ytplayer.exe', 'SDL3.dll', 'WebView2Loader.dll') {
+            if (-not (Test-Path "publish/$file")) { throw "the publish has no $file" }
+          }
+          $name = "ytplayer-$env:VERSION-${{ matrix.rid }}"
+          New-Item -ItemType Directory dist | Out-Null
+          Compress-Archive -Path (Get-ChildItem publish -Exclude *.pdb).FullName -DestinationPath "dist/$name.zip"
+          Compress-Archive -Path (Get-ChildItem publish -Filter *.pdb).FullName -DestinationPath "dist/$name-symbols.zip"
+          Get-ChildItem publish, dist | Format-Table Name, Length
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ytplayer-${{ matrix.rid }}
+          path: dist/
+
+  release:
+    needs: [check, publish]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          prerelease=""
+          [[ "$VERSION" == *-* ]] && prerelease="--prerelease"
+          gh release create "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "$GITHUB_REF_NAME" --generate-notes $prerelease
