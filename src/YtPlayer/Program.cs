@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using DIR.Lib;
@@ -55,7 +56,9 @@ internal static class Program
         if (!OperatingSystem.IsWindows())
             SetIconFromResource(window);
 
-        // Compact came on screen or left it: keep the size the window is leaving, take the other.
+        // Compact came on screen or left it: keep the height the window is leaving and take the other
+        // mode's, with the width it has now, so it stays in place (WindowFit.Switch).
+        int? narrowPipWidth = null;
         void ShowCompact(bool on)
         {
             if (on == showing)
@@ -66,8 +69,11 @@ internal static class Program
             else
                 browseSize = (w, h);
             showing = on;
+            var browseMinimumWidth = WindowFit.Scaled(WindowFit.BrowseMinimum, window.DisplayScale).W;
+            (var size, narrowPipWidth) = WindowFit.Switch(
+                on, w, (on ? pipSize : browseSize).Item2, browseMinimumWidth, narrowPipWidth);
             window.GetPosition(out var wx, out var wy);
-            Fit(window, new Box(wx, wy, w, h), on ? pipSize : browseSize, on);
+            Fit(window, new Box(wx, wy, w, h), size, on);
         }
 
         window.GetSizeInPixels(out var pixelW, out var pixelH);
@@ -98,6 +104,8 @@ internal static class Program
                 OpenPastedLink(web, pasted);
             if (message.Copy is { } link)
                 SetClipboardText(link);
+            if (message.SkipAt is { } skip)
+                ClickInPage(web, skip.X, skip.Y);
         });
         web.TitleChanged += title => UiQueue.Enqueue(() => window.SetTitle(TitleFor(title)));
         web.PageError += error => Console.Error.WriteLine($"[page] {error}");
@@ -154,21 +162,25 @@ internal static class Program
                 {
                     case PipButton.Back:
                         _ = web.ExecuteScriptAsync("history.back()");
-                        return true;
+                        break;
                     case PipButton.Compact:
                         compact = !compact;
                         web.PostMessage(CompactMessage(compact));
-                        return true;
+                        break;
                     case PipButton.Pin:
                         onTop = !onTop;
                         window.SetAlwaysOnTop(onTop);
-                        return true;
+                        break;
                     case PipButton.Close:
                         PushQuit();
                         return true;
                     default:
                         return false;
                 }
+                // A click on the strip leaves the keyboard on the strip; hand it back to the page, so
+                // the next key (space, Ctrl+F) reaches the video.
+                web.Focus();
+                return true;
             },
         };
         // The strip and border light up while the window is the active one, so it is plain when keys go
@@ -186,6 +198,10 @@ internal static class Program
             {
                 active = !active;
                 loop.BackgroundColor = active ? PipChrome.ActiveBackground : PipChrome.Background;
+                // However the window was activated (a click on the strip or border, the taskbar,
+                // Alt+Tab), the keys are for the page, not the strip.
+                if (active)
+                    web.Focus();
                 any = true;
             }
             if (any)
@@ -213,6 +229,25 @@ internal static class Program
         context.Dispose();
         window.Dispose();
         return 0;
+    }
+
+    // A left click at (x, y) in the page's CSS pixels that the page takes as the user's own, which a page
+    // script's click() is not: YouTube's ad Skip button ignores those. Sent as the DevTools protocol's
+    // input events, all three from here, the UI thread, as WebView2 requires; they arrive in order.
+    // WebKitGTK has no such protocol, so on Linux an ad's Skip waits for the viewer.
+    private static void ClickInPage(INativeWebView web, double x, double y)
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+        var at = $"\"x\":{x.ToString(CultureInfo.InvariantCulture)},\"y\":{y.ToString(CultureInfo.InvariantCulture)}";
+        Task.WhenAll(
+                web.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent", $"{{\"type\":\"mouseMoved\",{at}}}"),
+                web.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+                    $"{{\"type\":\"mousePressed\",{at},\"button\":\"left\",\"clickCount\":1}}"),
+                web.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+                    $"{{\"type\":\"mouseReleased\",{at},\"button\":\"left\",\"clickCount\":1}}"))
+            .ContinueWith(t => Console.Error.WriteLine($"[skip] click failed: {t.Exception?.GetBaseException().Message}"),
+                CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
     }
 
     // Ctrl+V outside a text field: a YouTube link opens; anything else on the clipboard is left alone.

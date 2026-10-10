@@ -84,16 +84,24 @@
     location.assign('/watch?v=' + id);
   }, true);
 
-  // An ad: once YouTube offers its Skip button, press it, the click the viewer would make. Nothing is
+  // An ad: once YouTube offers its Skip button, press it, the click the viewer would make. YouTube
+  // ignores a click from a page script (event.isTrusted is false), so the page only says where the
+  // button is and the host clicks there through the browser, a trusted click (WebView2 only). Nothing is
   // blocked; an ad that cannot be skipped, and the seconds before Skip appears, play as usual.
   // The newer ad overlay holds its Skip button (or, for an ad that cannot be skipped, the countdown to
   // the video) in a skip-or-preview container; the older class names are kept for the older layout.
   var SKIP_BUTTON = '.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern,' +
     ' .ytp-ad-player-overlay-layout__skip-or-preview-container button[class*="skip"]';
+  var lastSkipAt = 0;
   setInterval(function () {
     if (!document.querySelector('#movie_player.ad-showing')) return;
     var skip = document.querySelector(SKIP_BUTTON);
-    if (skip && skip.offsetParent !== null && !skip.disabled) skip.click();
+    // Asked again a second later if the ad is still there, in case a click landed mid-animation.
+    // getClientRects, not offsetParent: that is null for a fixed-position element even when it shows.
+    if (!skip || !skip.getClientRects().length || skip.disabled || Date.now() - lastSkipAt < 1000) return;
+    lastSkipAt = Date.now();
+    var r = skip.getBoundingClientRect();
+    post({ skipAt: { x: r.x + r.width / 2, y: r.y + r.height / 2 } });
   }, 500);
 
   // Host <-> page. The host says whether compact mode is on; the page says when it is ready for that,

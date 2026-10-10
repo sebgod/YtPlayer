@@ -24,10 +24,16 @@ public class PageMessageTests
         => PageMessage.Parse("""{"copy":"https://youtu.be/dQw4w9WgXcQ?t=83"}""")
             .ShouldBe(new PageMessage(false, null, null, "https://youtu.be/dQw4w9WgXcQ?t=83"));
 
+    [Fact]
+    public void ASkipAtCarriesWhereTheButtonIs()
+        => PageMessage.Parse("""{"skipAt":{"x":556.72,"y":279.33}}""").SkipAt.ShouldBe((556.72, 279.33));
+
     [Theory]
     [InlineData("not json")]
     [InlineData("\"a string\"")]
     [InlineData("""{"navigated":"https://www.youtube.com/"}""")]
     [InlineData("""{"showing":"yes","paste":42,"copy":false}""")]
+    [InlineData("""{"skipAt":{"x":"1","y":2}}""")]
+    [InlineData("""{"skipAt":[1,2]}""")]
     public void AnythingElseReadsAsEmpty(string json) => PageMessage.Parse(json).ShouldBe(default);
 }

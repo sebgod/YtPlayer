@@ -90,6 +90,8 @@ await press('c', 'KeyC', 67, 2); await sleep(300);
 s = await state();
 check('Ctrl+C copies the video link', s.posted.some(m => m.copy === `https://youtu.be/${videoId}`), s.posted);
 check('Ctrl+C shows the notice', await evaluate(`document.getElementById('ytpip-toast')?.classList.contains('ytpip-toast-on') === true`));
+// The link drops a time of 0, so let the video get going first.
+for (let i = 0; i < 20 && !(await evaluate(`(document.querySelector('#movie_player video')?.currentTime ?? 0) >= 1`)); i++) await sleep(250);
 await evaluate(`window.__posted.length = 0`);
 await press('C', 'KeyC', 67, 2 | 8); await sleep(300);
 s = await state();
@@ -99,6 +101,18 @@ await press('c', 'KeyC', 67, 2); await sleep(300);
 s = await state();
 check('Ctrl+C with a selection stays a copy', !s.posted.some(m => m.copy), s.posted);
 await evaluate(`window.getSelection().removeAllRanges(); document.getElementById('check-selection')?.remove()`);
+
+// 3c. An ad's Skip button: the page reports where it is, for the host to click (a trusted click; the
+// page's own would be ignored). A stand-in button during a stand-in ad, as real ads come when they like.
+await evaluate(`window.__posted.length = 0; (() => { document.getElementById('movie_player').classList.add('ad-showing');
+  const b = document.createElement('button'); b.className = 'ytp-skip-ad-button'; b.id = 'check-skip'; b.textContent = 'Skip';
+  b.style.cssText = 'position:fixed;right:20px;bottom:60px;width:90px;height:36px;z-index:2147483647';
+  document.body.appendChild(b); })()`);
+await sleep(1200);
+s = await state();
+const skipAt = s.posted.find(m => m.skipAt)?.skipAt;
+check("an ad's Skip button: the page reports where it is", !!skipAt && skipAt.x > 0 && skipAt.y > 0, s.posted);
+await evaluate(`document.getElementById('movie_player').classList.remove('ad-showing'); document.getElementById('check-skip')?.remove()`);
 
 // 4. Ctrl+F in compact lifts it for the search box; Escape puts it back.
 await evaluate(`window.__posted.length = 0`);

@@ -14,6 +14,18 @@ internal static class WindowFit
     public static readonly (int W, int H) BrowseMinimum = (560, 480);
     public static readonly (int W, int H) BrowseDefault = (600, 520);
 
+    /// <summary>The size a switch goes to: the new mode's remembered height, and the width the window
+    /// has now, so it keeps its place instead of jumping sideways. Browsing may need it wider than a
+    /// narrow PiP; then the PiP's own width is kept, to give back on the way back.</summary>
+    /// <returns>The size, and the narrow PiP width to give back later (null when there is none).</returns>
+    public static ((int W, int H) Size, int? NarrowPipWidth) Switch(
+        bool toPip, int currentWidth, int height, int browseMinimumWidth, int? narrowPipWidth)
+        => toPip
+            ? ((narrowPipWidth ?? currentWidth, height), null)
+            : currentWidth < browseMinimumWidth
+                ? ((browseMinimumWidth, height), currentWidth)
+                : ((currentWidth, height), null);
+
     public static (int W, int H) Scaled((int W, int H) logical, float scale)
         => ((int)MathF.Round(logical.W * scale), (int)MathF.Round(logical.H * scale));
 
