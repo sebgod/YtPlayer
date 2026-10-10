@@ -9,7 +9,8 @@ namespace YtPlayer;
 internal static class WindowFit
 {
     public static readonly (int W, int H) PipMinimum = (240, 170);
-    public static readonly (int W, int H) PipDefault = (360, 230);
+    // About 16:9 for the video once the strip and border are taken off; 360x230 was too small to watch.
+    public static readonly (int W, int H) PipDefault = (480, 300);
     public static readonly (int W, int H) BrowseMinimum = (560, 480);
     public static readonly (int W, int H) BrowseDefault = (600, 520);
 
