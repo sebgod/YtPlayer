@@ -93,8 +93,15 @@
   var SKIP_BUTTON = '.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern,' +
     ' .ytp-ad-player-overlay-layout__skip-or-preview-container button[class*="skip"]';
   var lastSkipAt = 0;
+  // The ad's start and end go to the host too, for its log (did a click skip it, or did it play out).
+  var adShowing = false;
   setInterval(function () {
-    if (!document.querySelector('#movie_player.ad-showing')) return;
+    var ad = !!document.querySelector('#movie_player.ad-showing');
+    if (ad !== adShowing) {
+      adShowing = ad;
+      post({ ad: ad });
+    }
+    if (!ad) return;
     var skip = document.querySelector(SKIP_BUTTON);
     // Asked again a second later if the ad is still there, in case a click landed mid-animation.
     // getClientRects, not offsetParent: that is null for a fixed-position element even when it shows.

@@ -7,10 +7,11 @@ namespace YtPlayer;
 /// not searching; the window takes its PiP size while it is), <c>paste</c> (text pasted outside a text
 /// field, which may be a link to open), <c>copy</c> (a link for the clipboard, from Ctrl+C or Ctrl+Shift+C),
 /// <c>skipAt</c> (where an ad's Skip button is, in the page's CSS pixels, for the host to click),
-/// <c>playing</c> (whether the player's video plays, for the strip's play/pause button).</summary>
+/// <c>playing</c> (whether the player's video plays, for the strip's play/pause button), <c>ad</c> (an ad
+/// started or ended, for the log).</summary>
 internal readonly record struct PageMessage(
     bool Ready, bool? Showing, string? Paste, string? Copy = null, (double X, double Y)? SkipAt = null,
-    bool? Playing = null)
+    bool? Playing = null, bool? Ad = null)
 {
     /// <summary>Reads <paramref name="json"/>; anything that is not one of ours reads as empty.</summary>
     public static PageMessage Parse(string json)
@@ -35,6 +36,9 @@ internal readonly record struct PageMessage(
                         : null,
                 Playing: root.TryGetProperty("playing", out var pl) && pl.ValueKind is JsonValueKind.True or JsonValueKind.False
                     ? pl.GetBoolean()
+                    : null,
+                Ad: root.TryGetProperty("ad", out var ad) && ad.ValueKind is JsonValueKind.True or JsonValueKind.False
+                    ? ad.GetBoolean()
                     : null);
         }
         catch (JsonException)

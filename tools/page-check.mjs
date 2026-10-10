@@ -121,7 +121,11 @@ await sleep(1200);
 s = await state();
 const skipAt = s.posted.find(m => m.skipAt)?.skipAt;
 check("an ad's Skip button: the page reports where it is", !!skipAt && skipAt.x > 0 && skipAt.y > 0, s.posted);
-await evaluate(`document.getElementById('movie_player').classList.remove('ad-showing'); document.getElementById('check-skip')?.remove()`);
+check('an ad: the page reports its start', s.posted.some(m => m.ad === true), s.posted);
+await evaluate(`window.__posted.length = 0; document.getElementById('movie_player').classList.remove('ad-showing'); document.getElementById('check-skip')?.remove()`);
+await sleep(800);
+s = await state();
+check('an ad: the page reports its end', s.posted.some(m => m.ad === false), s.posted);
 
 // 4. Ctrl+F in compact lifts it for the search box; Escape puts it back.
 await evaluate(`window.__posted.length = 0`);

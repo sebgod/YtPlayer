@@ -55,7 +55,9 @@ A script runs at the start of every YouTube page ([`yt-tweaks.js`](src/YtPlayer/
   and a channel's Shorts tab;
 - opens a Short as an ordinary video (`/shorts/ID` becomes `/watch?v=ID`);
 - hides YouTube's own miniplayer, a picture in picture inside this one;
-- presses an ad's Skip button as soon as YouTube offers it (an ad that cannot be skipped still plays);
+- presses an ad's Skip button as soon as YouTube offers it (an ad that cannot be skipped still plays). Each ad
+  goes in `ytplayer.log` beside the settings (`%LOCALAPPDATA%\YtPlayer` on Windows): when it started, the
+  Skip clicks, and whether it ended right after one or played out;
 - in compact mode, hides end-screen cards and the pause overlay.
 
 YouTube changes its markup often. When Shorts come back, the selector list at the top of that script is

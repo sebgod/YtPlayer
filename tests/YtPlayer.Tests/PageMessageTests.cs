@@ -35,6 +35,11 @@ public class PageMessageTests
         => PageMessage.Parse(json).Playing.ShouldBe(playing);
 
     [Theory]
+    [InlineData("""{"ad":true}""", true)]
+    [InlineData("""{"ad":false}""", false)]
+    public void AdSaysWhenAnAdStartsAndEnds(string json, bool ad) => PageMessage.Parse(json).Ad.ShouldBe(ad);
+
+    [Theory]
     [InlineData("not json")]
     [InlineData("\"a string\"")]
     [InlineData("""{"navigated":"https://www.youtube.com/"}""")]

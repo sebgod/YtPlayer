@@ -107,10 +107,11 @@ internal static class Program
         // The strip shows the page's title, and play or pause as the page's video does.
         string? stripTitle = null;
         var playing = false;
+        var adLog = new AdLog();
         // Not awaited: registered before the attach, it completes only after it, and the first
         // navigation waits for it anyway. Watched only so a refusal is not silent.
         web.AddScriptAtDocumentStartAsync(LoadTweaksScript()).ContinueWith(
-            t => Console.Error.WriteLine($"[tweaks] not registered: {t.Exception?.GetBaseException().Message}"),
+            t => PlayerLog.Write($"the page script was not registered: {t.Exception?.GetBaseException().Message}"),
             CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
         web.MessageReceived += json => UiQueue.Enqueue(() =>
         {
@@ -125,8 +126,13 @@ internal static class Program
                 OpenPastedLink(web, pasted);
             if (message.Copy is { } link)
                 SetClipboardText(link);
+            if (message.Ad is { } ad && (ad ? adLog.Started(System.DateTime.Now) : adLog.Ended(System.DateTime.Now)) is { } adLine)
+                PlayerLog.Write(adLine);
             if (message.SkipAt is { } skip)
+            {
+                PlayerLog.Write(adLog.SkipOffered(System.DateTime.Now, skip.X, skip.Y, canClick: OperatingSystem.IsWindows()));
                 ClickInPage(web, skip.X, skip.Y);
+            }
             if (message.Playing is { } p)
                 playing = p;
         });
@@ -311,7 +317,7 @@ internal static class Program
                     $"{{\"type\":\"mousePressed\",{at},\"button\":\"left\",\"clickCount\":1}}"),
                 web.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
                     $"{{\"type\":\"mouseReleased\",{at},\"button\":\"left\",\"clickCount\":1}}"))
-            .ContinueWith(t => Console.Error.WriteLine($"[skip] click failed: {t.Exception?.GetBaseException().Message}"),
+            .ContinueWith(t => PlayerLog.Write($"ad: the Skip click failed: {t.Exception?.GetBaseException().Message}"),
                 CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
     }
 
