@@ -49,9 +49,10 @@ internal static class Program
             window.SetPosition(x, y);
         window.GetPosition(out var startX, out var startY);
         Fit(window, new Box(startX, startY, startSize.Item1, startSize.Item2), startSize, showing);
-        if (OperatingSystem.IsWindows())
-            Win32Window.RemoveMaximize(window.Handle);
-        else
+        // The strip is a caption to Windows (the hit test says so), and a double-click on a caption
+        // maximizes: a picture-in-picture window has no use for that.
+        window.SetMaximizable(false);
+        if (!OperatingSystem.IsWindows())
             SetIconFromResource(window);
 
         // Compact came on screen or left it: keep the size the window is leaving, take the other.
@@ -163,9 +164,8 @@ internal static class Program
                 }
             },
         };
-        // The strip and border light up while the window is the active one. Checked every iteration (the
-        // loop wakes at least every 16 ms), as no SDL event covers it: see Win32Window.IsForeground.
-        var hwnd = OperatingSystem.IsWindows() ? Win32Window.Handle(window.Handle) : nint.Zero;
+        // The strip and border light up while the window is the active one, so it is plain when keys go
+        // to it. Nothing signals a change, so it is read every iteration (at least every 16 ms).
         var active = false;
         loop.OnLoopIteration = () =>
         {
@@ -175,12 +175,9 @@ internal static class Program
                 action();
                 any = true;
             }
-            var nowActive = OperatingSystem.IsWindows()
-                ? Win32Window.IsForeground(hwnd)
-                : (GetWindowFlags(window.Handle) & WindowFlags.InputFocus) != 0;
-            if (nowActive != active)
+            if (window.IsActive != active)
             {
-                active = nowActive;
+                active = !active;
                 loop.BackgroundColor = active ? PipChrome.ActiveBackground : PipChrome.Background;
                 any = true;
             }
@@ -233,10 +230,10 @@ internal static class Program
         // Window coordinates are pixels on Windows and X11, the platforms with a web view backend, so
         // logical sizes scale by the display's scale.
         var min = WindowFit.Scaled(pip ? WindowFit.PipMinimum : WindowFit.BrowseMinimum, window.DisplayScale);
-        SetWindowMinimumSize(window.Handle, min.W, min.H);
+        window.SetMinimumSize(min.W, min.H);
         var target = (Math.Max(size.W, min.W), Math.Max(size.H, min.H));
-        var usable = GetDisplayUsableBounds(GetDisplayForWindow(window.Handle), out var r)
-            ? new Box(r.X, r.Y, r.W, r.H)
+        var usable = window.TryGetUsableDisplayBounds(out var ux, out var uy, out var uw, out var uh)
+            ? new Box(ux, uy, uw, uh)
             : current with { W = int.MaxValue / 4, H = int.MaxValue / 4 };
         var placed = WindowFit.Place(current, target, usable);
         window.SetSize(placed.W, placed.H);
