@@ -78,6 +78,18 @@
     location.assign('/watch?v=' + id);
   }, true);
 
+  // An ad: once YouTube offers its Skip button, press it, the click the viewer would make. Nothing is
+  // blocked; an ad that cannot be skipped, and the seconds before Skip appears, play as usual.
+  // The newer ad overlay holds its Skip button (or, for an ad that cannot be skipped, the countdown to
+  // the video) in a skip-or-preview container; the older class names are kept for the older layout.
+  var SKIP_BUTTON = '.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern,' +
+    ' .ytp-ad-player-overlay-layout__skip-or-preview-container button[class*="skip"]';
+  setInterval(function () {
+    if (!document.querySelector('#movie_player.ad-showing')) return;
+    var skip = document.querySelector(SKIP_BUTTON);
+    if (skip && skip.offsetParent !== null && !skip.disabled) skip.click();
+  }, 500);
+
   // Host <-> page. The host says whether compact mode is on; the page says when it is ready for that,
   // and reports the video it shows so the host can title the window.
   // Compact is the host's preference, applied only on a watch page. Anywhere else there is no video to
