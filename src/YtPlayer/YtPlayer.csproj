@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- net10.0-windows carries the WebView2 (Edge) backend; the base TFM carries WebKitGTK (Linux).
+         NuGet hands SdlVulkan.Renderer.WebView's matching TFM to each, so a Windows build must use
+         the -windows one: `dotnet run -f net10.0-windows`. -->
+    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>ytplayer</AssemblyName>
+    <RootNamespace>YtPlayer</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Scripts\yt-tweaks.js" LogicalName="yt-tweaks.js" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseLocalSiblings)' == 'true'">
+    <ProjectReference Include="$(SiblingRoot)SdlVulkan.Renderer\src\SdlVulkan.Renderer\SdlVulkan.Renderer.csproj" />
+    <ProjectReference Include="$(SiblingRoot)SdlVulkan.Renderer\src\SdlVulkan.Renderer.WebView\SdlVulkan.Renderer.WebView.csproj" />
+  </ItemGroup>
+  <!-- The SdlVulkan.Renderer.WebView.Native package puts WebView2Loader.dll under runtimes/<rid>/native/,
+       where WebView2Utilities.Initialize probes for it. A ProjectReference copies no such asset (without
+       it the web view fails at attach: "Cannot load WebView2Loader.dll"), so copy it from the sibling
+       the way its own tools/WebViewSmoke does. -->
+  <ItemGroup Condition="'$(UseLocalSiblings)' == 'true' AND '$(TargetFramework)' == 'net10.0-windows'">
+    <None Include="$(SiblingRoot)SdlVulkan.Renderer\src\SdlVulkan.Renderer.WebView.Native\runtimes\**\WebView2Loader.dll"
+          Link="runtimes\%(RecursiveDir)WebView2Loader.dll"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseLocalSiblings)' != 'true'">
+    <PackageReference Include="SdlVulkan.Renderer" />
+    <PackageReference Include="SdlVulkan.Renderer.WebView" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SDL3-CS" NoWarn="NU5104" />
+    <PackageReference Include="SDL3-CS.Native" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="YtPlayer.Tests" />
+  </ItemGroup>
+
+</Project>

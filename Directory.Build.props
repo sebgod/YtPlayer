@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Build against a sibling SdlVulkan.Renderer checkout when one sits next to this repo
+         (../SdlVulkan.Renderer), the way TianWen does; otherwise, and always in CI, take the NuGet
+         packages. Override with -p:UseLocalSiblings=false. -->
+    <UseLocalSiblings Condition="'$(UseLocalSiblings)' == ''
+      AND Exists('$(MSBuildThisFileDirectory)..\SdlVulkan.Renderer\src\SdlVulkan.Renderer.WebView\SdlVulkan.Renderer.WebView.csproj')">true</UseLocalSiblings>
+    <SiblingRoot>$(MSBuildThisFileDirectory)..\</SiblingRoot>
+  </PropertyGroup>
+</Project>
