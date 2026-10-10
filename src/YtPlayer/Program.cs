@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Text.Json;
 using DIR.Lib;
 using SdlVulkan.Renderer;
 using SdlVulkan.Renderer.WebView;
@@ -37,6 +36,8 @@ internal static class Program
         if (settings is { X: { } x, Y: { } y })
             SetWindowPosition(window.Handle, x, y);
         SetWindowMinimumSize(window.Handle, 240, 170);
+        if (OperatingSystem.IsWindows())
+            Win32Window.RemoveMaximize(window.Handle);
 
         window.GetSizeInPixels(out var pixelW, out var pixelH);
         var context = VulkanContext.CreateForSharedDevice(app.Device, window.Surface, (uint)pixelW, (uint)pixelH);
@@ -53,7 +54,20 @@ internal static class Program
         web.AddScriptAtDocumentStartAsync(LoadTweaksScript()).ContinueWith(
             t => Console.Error.WriteLine($"[tweaks] not registered: {t.Exception?.GetBaseException().Message}"),
             CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
-        web.MessageReceived += json => UiQueue.Enqueue(() => OnPageMessage(json, web, compact));
+        // Whether the page is a watch page, where compact (if on) is showing; the compact button says so.
+        var watching = false;
+        web.MessageReceived += json => UiQueue.Enqueue(() =>
+        {
+            var message = PageMessage.Parse(json);
+            // The page asks for the compact state when it is ready (every full load), since a
+            // document-start script cannot know it.
+            if (message.Ready)
+                web.PostMessage(CompactMessage(compact));
+            if (message.Watching is { } w)
+                watching = w;
+            if (message.Paste is { } pasted)
+                OpenPastedLink(web, pasted);
+        });
         web.TitleChanged += title => UiQueue.Enqueue(() => window.SetTitle(TitleFor(title)));
         web.PageError += error => Console.Error.WriteLine($"[page] {error}");
         web.AttachToWindow(window);
@@ -63,7 +77,7 @@ internal static class Program
         var loop = new SdlEventLoop(window, renderer)
         {
             BackgroundColor = PipChrome.Background,
-            OnRender = () => chrome.Draw(_layout, compact, onTop),
+            OnRender = () => chrome.Draw(_layout, compact, watching, onTop),
             OnResize = (_, _) =>
             {
                 _layout = CurrentLayout(window);
@@ -76,6 +90,25 @@ internal static class Program
                     return false;
                 chrome.Hovered = hovered;
                 return true;
+            },
+            // Keys reach here only while the strip has focus (after a click on it); in the page, the
+            // tweaks script handles the same two shortcuts.
+            OnKeyDown = key =>
+            {
+                if (key.Modifiers != InputModifier.Ctrl)
+                    return false;
+                switch (key.Key)
+                {
+                    case InputKey.V:
+                        OpenPastedLink(web, GetClipboardText());
+                        return true;
+                    case InputKey.F:
+                        web.Focus();
+                        web.PostMessage("""{"search":true}""");
+                        return true;
+                    default:
+                        return false;
+                }
             },
             OnMouseDown = (button, mx, my, _, _) =>
             {
@@ -127,20 +160,11 @@ internal static class Program
         return 0;
     }
 
-    // The page asks for the compact state when it is ready (every full load), since a document-start
-    // script cannot know it.
-    private static void OnPageMessage(string json, INativeWebView web, bool compact)
+    // Ctrl+V outside a text field: a YouTube link opens; anything else on the clipboard is left alone.
+    private static void OpenPastedLink(INativeWebView web, string? pasted)
     {
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("ready", out _))
-                web.PostMessage(CompactMessage(compact));
-        }
-        catch (JsonException)
-        {
-            // Not ours.
-        }
+        if (YouTubeUrl.FromPastedLink(pasted) is { } url)
+            web.Navigate(url);
     }
 
     private static string CompactMessage(bool compact) => compact ? """{"compact":true}""" : """{"compact":false}""";

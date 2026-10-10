@@ -53,4 +53,26 @@ public class YouTubeUrlTests
     [Fact]
     public void ALinkElsewhereIsASearchNotANavigation()
         => YouTubeUrl.ToStartUrl("https://example.com/").ShouldStartWith("https://www.youtube.com/results?");
+
+    [Theory]
+    [InlineData("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ", "https://www.youtube.com/watch?v=dQw4w9WgXcQ")]
+    [InlineData("  https://youtu.be/dQw4w9WgXcQ?t=10\r\n", "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=10")]
+    [InlineData("youtu.be/dQw4w9WgXcQ", "https://www.youtube.com/watch?v=dQw4w9WgXcQ")]
+    [InlineData("www.youtube.com/shorts/dQw4w9WgXcQ", "https://www.youtube.com/watch?v=dQw4w9WgXcQ")]
+    [InlineData("https://music.youtube.com/watch?v=dQw4w9WgXcQ", "https://www.youtube.com/watch?v=dQw4w9WgXcQ")]
+    [InlineData("https://www.youtube.com/@CoolWorldsLab", "https://www.youtube.com/@CoolWorldsLab")]
+    [InlineData("https://www.youtube.com/playlist?list=PL1", "https://www.youtube.com/playlist?list=PL1")]
+    public void APastedYouTubeLinkOpens(string pasted, string url)
+        => YouTubeUrl.FromPastedLink(pasted).ShouldBe(url);
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("dQw4w9WgXcQ")] // a bare id: as likely any 11 characters
+    [InlineData("lofi beats")]
+    [InlineData("https://example.com/watch?v=dQw4w9WgXcQ")]
+    [InlineData("ftp://www.youtube.com/watch?v=dQw4w9WgXcQ")]
+    [InlineData("see https://youtu.be/dQw4w9WgXcQ")]
+    public void APasteThatIsNotALinkOpensNothing(string? pasted)
+        => YouTubeUrl.FromPastedLink(pasted).ShouldBeNull();
 }
