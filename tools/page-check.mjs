@@ -83,6 +83,39 @@ check('result: compact applies on the watch page', s.compact);
 check('result: reports showing:true', s.posted.some(m => m.showing === true), s.posted);
 check('result: video plays', s.video && !s.video.paused, s.video);
 
+// 3-. A real ad, when YouTube serves one (it comes when it likes): do what the host does with each Skip
+// the page reports, a trusted click there, and check that ad ends (the player leaves the ad, or the next
+// ad in the break starts). It has to be over before the checks below anyway: during an ad the video's
+// time stands still, and the stand-in ad would be taken for this one.
+const adMark = () => evaluate(`(() => { const p = document.querySelector('#movie_player'); const v = p?.querySelector('video');
+  return { ad: !!p?.classList.contains('ad-showing'), src: v?.src ?? '', t: v?.currentTime ?? 0 }; })()`);
+if ((await adMark()).ad) {
+  console.log('.... a real ad: clicking each Skip the page reports, as the host does');
+  const until = Date.now() + 120000;
+  let seen = 0, clicks = 0, skipped = 0, sawSkipish = null;
+  for (let mark = await adMark(); mark.ad && Date.now() < until; mark = await adMark()) {
+    sawSkipish = (await evaluate(`(() => { const found = [...document.querySelectorAll('#movie_player [class*="skip"]')].map(e => {
+      const r = e.getBoundingClientRect(); return e.tagName.toLowerCase() + '.' + e.className + ' ' + Math.round(r.width) + 'x' + Math.round(r.height); });
+      return found.length ? found : null; })()`)) ?? sawSkipish;
+    const posted = await evaluate(`window.__posted`);
+    const skipAt = posted.slice(seen).filter(m => m.skipAt).pop()?.skipAt;
+    seen = posted.length;
+    if (!skipAt) { await sleep(500); continue; }
+    for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased'])
+      await send('Input.dispatchMouseEvent', { type, x: skipAt.x, y: skipAt.y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
+    clicks++;
+    await sleep(3000);
+    const after = await adMark();
+    if (!after.ad || after.src !== mark.src || after.t < mark.t) skipped++;
+    else console.log('.... the click did not end that ad  ' + JSON.stringify({ skipAt, before: mark, after }));
+  }
+  const over = !(await adMark()).ad;
+  check('a real ad: it ends', over);
+  if (clicks) check('a real ad: each trusted click on the Skip the page reported ended its ad', skipped === clicks, { clicks, skipped });
+  else console.log('.... the ad played out with no Skip reported (one that cannot be skipped?)  ' + JSON.stringify({ skipish: sawSkipish }));
+  await evaluate(`window.__posted.length = 0`);
+}
+
 // 3a. Play state for the strip's button: the page reports it, and the host's toggle pauses the player.
 check('result: reports playing:true', s.posted.some(m => m.playing === true), s.posted.filter(m => 'playing' in m));
 await evaluate(`window.__posted.length = 0; window.__host({ togglePlay: true })`); await sleep(500);
@@ -113,16 +146,30 @@ await evaluate(`window.getSelection().removeAllRanges(); document.getElementById
 
 // 3c. An ad's Skip button: the page reports where it is, for the host to click (a trusted click; the
 // page's own would be ignored). A stand-in button during a stand-in ad, as real ads come when they like.
+// First the buttons YouTube has in the page but not on screen, which a click would miss: one with no
+// width at x 0 (as a real ad had), a transparent one, and one under something else.
 await evaluate(`window.__posted.length = 0; (() => { document.getElementById('movie_player').classList.add('ad-showing');
-  const b = document.createElement('button'); b.className = 'ytp-skip-ad-button'; b.id = 'check-skip'; b.textContent = 'Skip';
+  const add = (id, css) => { const b = document.createElement('button'); b.className = 'ytp-skip-ad-button check-skip'; b.id = id;
+    b.textContent = 'Skip'; b.style.cssText = 'position:fixed;z-index:2147483646;' + css; document.body.appendChild(b); return b; };
+  add('check-skip-empty', 'left:0;bottom:40px;width:0;height:36px;padding:0;border:0;overflow:hidden');
+  add('check-skip-clear', 'left:120px;bottom:60px;width:90px;height:36px;opacity:0');
+  add('check-skip-under', 'left:240px;bottom:60px;width:90px;height:36px');
+  const cover = document.createElement('div'); cover.className = 'check-skip';
+  cover.style.cssText = 'position:fixed;left:230px;bottom:50px;width:110px;height:56px;z-index:2147483647;background:#222';
+  document.body.appendChild(cover); })()`);
+await sleep(1200);
+s = await state();
+check("an ad: a Skip button that is not shown is not reported", !s.posted.some(m => m.skipAt), s.posted);
+check('an ad: the page reports its start', s.posted.some(m => m.ad === true), s.posted);
+await evaluate(`(() => { const b = document.createElement('button'); b.className = 'ytp-skip-ad-button check-skip'; b.id = 'check-skip'; b.textContent = 'Skip';
   b.style.cssText = 'position:fixed;right:20px;bottom:60px;width:90px;height:36px;z-index:2147483647';
   document.body.appendChild(b); })()`);
 await sleep(1200);
 s = await state();
 const skipAt = s.posted.find(m => m.skipAt)?.skipAt;
-check("an ad's Skip button: the page reports where it is", !!skipAt && skipAt.x > 0 && skipAt.y > 0, s.posted);
-check('an ad: the page reports its start', s.posted.some(m => m.ad === true), s.posted);
-await evaluate(`window.__posted.length = 0; document.getElementById('movie_player').classList.remove('ad-showing'); document.getElementById('check-skip')?.remove()`);
+const skipBox = await evaluate(`(() => { const r = document.getElementById('check-skip').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+check("an ad's Skip button: the page reports its centre", !!skipAt && Math.abs(skipAt.x - skipBox.x) < 1 && Math.abs(skipAt.y - skipBox.y) < 1, { posted: s.posted, skipBox });
+await evaluate(`window.__posted.length = 0; document.getElementById('movie_player').classList.remove('ad-showing'); document.querySelectorAll('.check-skip').forEach(e => e.remove())`);
 await sleep(800);
 s = await state();
 check('an ad: the page reports its end', s.posted.some(m => m.ad === false), s.posted);
