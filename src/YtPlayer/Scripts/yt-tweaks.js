@@ -76,10 +76,22 @@
 
   // Host <-> page. The host says whether compact mode is on; the page says when it is ready for that,
   // and reports the video it shows so the host can title the window.
-  function setCompact(on) {
-    document.documentElement.classList.toggle('ytpip-compact', !!on);
+  // Compact is the host's preference, applied only on a watch page. Anywhere else there is no video to
+  // fill the window, and hiding the masthead and the scrollbar would only leave the page cut off, so
+  // there it waits for the next video (YouTube's in-page navigation re-checks it).
+  var compactWanted = false;
+  function applyCompact() {
+    var root = document.documentElement;
+    var on = compactWanted && location.pathname === '/watch';
+    if (root.classList.contains('ytpip-compact') === on) return;
+    root.classList.toggle('ytpip-compact', on);
     window.dispatchEvent(new Event('resize'));
   }
+  function setCompact(on) {
+    compactWanted = !!on;
+    applyCompact();
+  }
+  document.addEventListener('yt-navigate-finish', applyCompact);
   function post(msg) {
     try { window.chrome.webview.postMessage(msg); } catch (e) { /* no host bridge */ }
   }

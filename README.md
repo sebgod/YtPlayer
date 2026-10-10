@@ -16,7 +16,8 @@ ytplayer lofi beats                         # a search
 - **The strip along the top drags the window**; the thin border around it resizes, corners included.
 - **Back** (`<`) goes back a page.
 - **Compact** (the screen icon) shows the video alone, filling the window, with YouTube's own controls.
-  Turn it off to browse. A video given on the command line opens compact.
+  Turn it off to browse. It applies only on a video's page: anywhere else YouTube shows as usual, and
+  compact takes over when you open a video. A video given on the command line opens compact.
 - **Stay on top** (the dot): red while the window floats above others.
 - **Close** (`×`).
 
