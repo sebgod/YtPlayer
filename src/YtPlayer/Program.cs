@@ -96,6 +96,8 @@ internal static class Program
                 ShowCompact(on);
             if (message.Paste is { } pasted)
                 OpenPastedLink(web, pasted);
+            if (message.Copy is { } link)
+                SetClipboardText(link);
         });
         web.TitleChanged += title => UiQueue.Enqueue(() => window.SetTitle(TitleFor(title)));
         web.PageError += error => Console.Error.WriteLine($"[page] {error}");
@@ -121,19 +123,24 @@ internal static class Program
                 return true;
             },
             // Keys reach here only while the strip has focus (after a click on it); in the page, the
-            // tweaks script handles the same two shortcuts.
+            // tweaks script handles the same shortcuts.
             OnKeyDown = key =>
             {
-                if (key.Modifiers != InputModifier.Ctrl)
-                    return false;
-                switch (key.Key)
+                switch (key.Modifiers, key.Key)
                 {
-                    case InputKey.V:
+                    case (InputModifier.Ctrl, InputKey.V):
                         OpenPastedLink(web, GetClipboardText());
                         return true;
-                    case InputKey.F:
+                    case (InputModifier.Ctrl, InputKey.F):
                         web.Focus();
                         web.PostMessage("""{"search":true}""");
+                        return true;
+                    // The page knows the video and the time; it answers with a copy message.
+                    case (InputModifier.Ctrl, InputKey.C):
+                        web.PostMessage("""{"copyLink":"plain"}""");
+                        return true;
+                    case (InputModifier.Ctrl | InputModifier.Shift, InputKey.C):
+                        web.PostMessage("""{"copyLink":"time"}""");
                         return true;
                     default:
                         return false;

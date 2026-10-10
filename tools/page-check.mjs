@@ -83,6 +83,23 @@ check('result: compact applies on the watch page', s.compact);
 check('result: reports showing:true', s.posted.some(m => m.showing === true), s.posted);
 check('result: video plays', s.video && !s.video.paused, s.video);
 
+// 3b. Ctrl+C with nothing selected copies the video's link; Ctrl+Shift+C, the link at the current time.
+const videoId = await evaluate(`new URLSearchParams(location.search).get('v')`);
+await evaluate(`window.getSelection().removeAllRanges(); window.__posted.length = 0`);
+await press('c', 'KeyC', 67, 2); await sleep(300);
+s = await state();
+check('Ctrl+C copies the video link', s.posted.some(m => m.copy === `https://youtu.be/${videoId}`), s.posted);
+check('Ctrl+C shows the notice', await evaluate(`document.getElementById('ytpip-toast')?.classList.contains('ytpip-toast-on') === true`));
+await evaluate(`window.__posted.length = 0`);
+await press('C', 'KeyC', 67, 2 | 8); await sleep(300);
+s = await state();
+check('Ctrl+Shift+C copies the link at the current time', s.posted.some(m => typeof m.copy === 'string' && m.copy.startsWith(`https://youtu.be/${videoId}?t=`) && /[?]t=[1-9][0-9]*$/.test(m.copy)), s.posted);
+await evaluate(`window.__posted.length = 0; (() => { const t = document.createElement('p'); t.id = 'check-selection'; t.textContent = 'some text to copy'; t.style.cssText = 'position:fixed;top:0;left:0;z-index:2147483647;background:#fff;color:#000'; document.body.appendChild(t); const r = document.createRange(); r.selectNodeContents(t); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); })()`);
+await press('c', 'KeyC', 67, 2); await sleep(300);
+s = await state();
+check('Ctrl+C with a selection stays a copy', !s.posted.some(m => m.copy), s.posted);
+await evaluate(`window.getSelection().removeAllRanges(); document.getElementById('check-selection')?.remove()`);
+
 // 4. Ctrl+F in compact lifts it for the search box; Escape puts it back.
 await evaluate(`window.__posted.length = 0`);
 await press('f', 'KeyF', 70, 2); await sleep(800);

@@ -42,7 +42,13 @@
     // YouTube's own miniplayer, which takes over when you leave a watch page, is a picture-in-picture
     // inside ours and covers most of a small window. Hidden, the video keeps playing (media keys still
     // reach it); the compact button brings it back.
-    'ytd-miniplayer { display: none !important; }\n';
+    'ytd-miniplayer { display: none !important; }\n' +
+    // The notice a copied link shows, over everything, compact included.
+    '#ytpip-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);' +
+    ' z-index: 2147483647; padding: 8px 14px; border-radius: 8px; background: rgba(24, 24, 28, 0.92);' +
+    ' color: #fff; font: 500 14px/1.2 Roboto, Arial, sans-serif; opacity: 0; transition: opacity 0.2s;' +
+    ' pointer-events: none; }\n' +
+    '#ytpip-toast.ytpip-toast-on { opacity: 1; }\n';
 
   function addStyle() {
     var style = document.createElement('style');
@@ -167,6 +173,56 @@
     }
   }, true);
 
+  // Ctrl+C with nothing selected copies the video's link; Ctrl+Shift+C, the link at the current time
+  // (which also keeps the browser's element inspector, on that key, from opening). The video is the
+  // player's, so a video playing on in the background while browsing is the one copied; with no video,
+  // the page's address. The host puts the link on the clipboard: the page's own clipboard access hangs
+  // on permissions a web view may not grant.
+  function playerVideo() {
+    var player = document.getElementById('movie_player');
+    try {
+      var data = player && player.getVideoData && player.getVideoData();
+      if (data && data.video_id) return { id: data.video_id, time: Math.floor(player.getCurrentTime() || 0) };
+    } catch (e) { /* not YouTube's player API after all */ }
+    var id = isWatchPage() && new URLSearchParams(location.search).get('v');
+    var video = document.querySelector('video');
+    return id ? { id: id, time: video ? Math.floor(video.currentTime) : 0 } : null;
+  }
+  function clock(seconds) {
+    var h = Math.floor(seconds / 3600), m = Math.floor(seconds / 60) % 60, s = seconds % 60;
+    var mm = h ? (m < 10 ? '0' : '') + m : String(m);
+    return (h ? h + ':' : '') + mm + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function toast(text) {
+    var el = document.getElementById('ytpip-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'ytpip-toast';
+      document.documentElement.appendChild(el);
+    }
+    el.textContent = text;
+    el.classList.add('ytpip-toast-on');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(function () { el.classList.remove('ytpip-toast-on'); }, 1500);
+  }
+  function copyLink(atTime) {
+    var video = playerVideo();
+    var timed = !!video && atTime && video.time > 0;
+    post({ copy: video ? 'https://youtu.be/' + video.id + (timed ? '?t=' + video.time : '') : location.href });
+    toast(timed ? 'Link at ' + clock(video.time) + ' copied' : 'Link copied');
+  }
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.key !== 'c' && e.key !== 'C')) return;
+    if (!e.shiftKey) {
+      // A plain Ctrl+C is a copy wherever there is something to copy.
+      var selection = window.getSelection();
+      if (isTextField(document.activeElement) || (selection && String(selection).trim())) return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    copyLink(e.shiftKey);
+  }, true);
+
   // Ctrl+V outside a text field: the text goes to the host, which opens it if it is a YouTube link
   // (YouTubeUrl.FromPastedLink decides). Inside a text field a paste is just a paste.
   function isTextField(el) {
@@ -186,6 +242,7 @@
       var d = e.data;
       if (d && typeof d.compact === 'boolean') setCompact(d.compact);
       if (d && d.search) startSearch();
+      if (d && d.copyLink) copyLink(d.copyLink === 'time');
       if (d && d.togglePlay) {
         var v = document.querySelector('video');
         if (v) { if (v.paused) v.play(); else v.pause(); }

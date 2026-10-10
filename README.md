@@ -33,6 +33,8 @@ and remembers each size, as you last left it, between runs; so are its position 
 | --- | --- |
 | **Ctrl+F** | YouTube's search box (on a compact video, compact steps aside until you pick a result or press Esc) |
 | **Ctrl+V** | opens a YouTube link from the clipboard: a video, Short, playlist or channel; `youtu.be/…` without `https://` too |
+| **Ctrl+C** | with nothing selected, copies the video's link (`https://youtu.be/…`); with a selection, a normal copy |
+| **Ctrl+Shift+C** | copies the video's link at the current time (`…?t=83`) |
 | media keys, headset button | play/pause, as with YouTube in a browser |
 
 ## Signing in, and what is hidden
@@ -47,6 +49,7 @@ A script runs at the start of every YouTube page ([`yt-tweaks.js`](src/YtPlayer/
   and a channel's Shorts tab;
 - opens a Short as an ordinary video (`/shorts/ID` becomes `/watch?v=ID`);
 - hides YouTube's own miniplayer, a picture in picture inside this one;
+- presses an ad's Skip button as soon as YouTube offers it (an ad that cannot be skipped still plays);
 - in compact mode, hides end-screen cards and the pause overlay.
 
 YouTube changes its markup often. When Shorts come back, the selector list at the top of that script is
