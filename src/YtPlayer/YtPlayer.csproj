@@ -23,6 +23,15 @@
     <ProjectReference Include="$(SiblingRoot)SdlVulkan.Renderer\src\SdlVulkan.Renderer\SdlVulkan.Renderer.csproj" />
     <ProjectReference Include="$(SiblingRoot)SdlVulkan.Renderer\src\SdlVulkan.Renderer.WebView\SdlVulkan.Renderer.WebView.csproj" />
   </ItemGroup>
+  <!-- The SdlVulkan.Renderer.WebView.Native package puts WebView2Loader.dll under runtimes/<rid>/native/,
+       where WebView2Utilities.Initialize probes for it. A ProjectReference copies no such asset (without
+       it the web view fails at attach: "Cannot load WebView2Loader.dll"), so copy it from the sibling
+       the way its own tools/WebViewSmoke does. -->
+  <ItemGroup Condition="'$(UseLocalSiblings)' == 'true' AND '$(TargetFramework)' == 'net10.0-windows'">
+    <None Include="$(SiblingRoot)SdlVulkan.Renderer\src\SdlVulkan.Renderer.WebView.Native\runtimes\**\WebView2Loader.dll"
+          Link="runtimes\%(RecursiveDir)WebView2Loader.dll"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
   <ItemGroup Condition="'$(UseLocalSiblings)' != 'true'">
     <PackageReference Include="SdlVulkan.Renderer" />
     <PackageReference Include="SdlVulkan.Renderer.WebView" />
