@@ -1,0 +1,3 @@
+# Raw pixels: never touched by line-ending conversion.
+*.rgba binary
+*.ico binary

@@ -26,6 +26,23 @@ internal static partial class YouTubeUrl
         return $"{Home}results?search_query={Uri.EscapeDataString(text)}";
     }
 
+    /// <summary>The page a pasted link opens: a video's watch page whatever form the link takes, or any
+    /// other YouTube URL as it is. The scheme may be left off (<c>youtu.be/…</c>). Null for anything else,
+    /// a bare id or search words included: unlike a command-line argument, a clipboard is too often
+    /// holding something that only looks like one.</summary>
+    public static string? FromPastedLink(string? text)
+    {
+        var link = text?.Trim();
+        if (string.IsNullOrEmpty(link) || link.Any(char.IsWhiteSpace))
+            return null;
+        if (!link.Contains("://", StringComparison.Ordinal))
+            link = "https://" + link;
+        if (!Uri.TryCreate(link, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("https" or "http") || !IsYouTubeHost(uri.Host))
+            return null;
+        return TryGetVideoId(link, out var id, out var start) ? WatchUrl(id, start) : uri.AbsoluteUri;
+    }
+
     public static string WatchUrl(string id, string? start = null)
         => start is null ? $"{Home}watch?v={id}" : $"{Home}watch?v={id}&t={Uri.EscapeDataString(start)}";
 

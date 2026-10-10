@@ -13,10 +13,14 @@
     <IsAotCompatible>true</IsAotCompatible>
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Drawn by tools/make-icon.py. On Windows SDL takes the window's icon from the exe's. -->
+    <ApplicationIcon>Assets\ytplayer.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Scripts\yt-tweaks.js" LogicalName="yt-tweaks.js" />
+    <!-- The window icon on Linux, as raw RGBA (no image decoder needed). -->
+    <EmbeddedResource Include="Assets\ytplayer-64.rgba" LogicalName="ytplayer-64.rgba" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalSiblings)' == 'true'">
