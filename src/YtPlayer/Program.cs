@@ -46,7 +46,7 @@ internal static class Program
         var window = app.CreateWindow("YtPlayer", startSize.Item1, startSize.Item2,
             maximized: false, borderless: true, alwaysOnTop: onTop);
         if (settings is { X: { } x, Y: { } y })
-            SetWindowPosition(window.Handle, x, y);
+            window.SetPosition(x, y);
         window.GetPosition(out var startX, out var startY);
         Fit(window, new Box(startX, startY, startSize.Item1, startSize.Item2), startSize, showing);
         if (OperatingSystem.IsWindows())
@@ -163,12 +163,25 @@ internal static class Program
                 }
             },
         };
+        // The strip and border light up while the window is the active one. Checked every iteration (the
+        // loop wakes at least every 16 ms), as no SDL event covers it: see Win32Window.IsForeground.
+        var hwnd = OperatingSystem.IsWindows() ? Win32Window.Handle(window.Handle) : nint.Zero;
+        var active = false;
         loop.OnLoopIteration = () =>
         {
             var any = false;
             while (UiQueue.TryDequeue(out var action))
             {
                 action();
+                any = true;
+            }
+            var nowActive = OperatingSystem.IsWindows()
+                ? Win32Window.IsForeground(hwnd)
+                : (GetWindowFlags(window.Handle) & WindowFlags.InputFocus) != 0;
+            if (nowActive != active)
+            {
+                active = nowActive;
+                loop.BackgroundColor = active ? PipChrome.ActiveBackground : PipChrome.Background;
                 any = true;
             }
             if (any)
@@ -217,45 +230,29 @@ internal static class Program
     // Sets the mode's minimum, then sizes and places the window in place of current, on its display.
     private static void Fit(SdlVulkanWindow window, Box current, (int W, int H) size, bool pip)
     {
-        var min = WindowFit.Scaled(pip ? WindowFit.PipMinimum : WindowFit.BrowseMinimum, ContentScale(window));
+        // Window coordinates are pixels on Windows and X11, the platforms with a web view backend, so
+        // logical sizes scale by the display's scale.
+        var min = WindowFit.Scaled(pip ? WindowFit.PipMinimum : WindowFit.BrowseMinimum, window.DisplayScale);
         SetWindowMinimumSize(window.Handle, min.W, min.H);
         var target = (Math.Max(size.W, min.W), Math.Max(size.H, min.H));
         var usable = GetDisplayUsableBounds(GetDisplayForWindow(window.Handle), out var r)
             ? new Box(r.X, r.Y, r.W, r.H)
             : current with { W = int.MaxValue / 4, H = int.MaxValue / 4 };
         var placed = WindowFit.Place(current, target, usable);
-        SetWindowSize(window.Handle, placed.W, placed.H);
-        SetWindowPosition(window.Handle, placed.X, placed.Y);
-    }
-
-    // Logical units to window coordinates: window coordinates are pixels on Windows and X11, so this is
-    // the display's scale; where they are points (pixel density above 1), it divides back out.
-    private static float ContentScale(SdlVulkanWindow window)
-    {
-        var display = GetWindowDisplayScale(window.Handle);
-        var density = GetWindowPixelDensity(window.Handle);
-        return display > 0 && density > 0 ? display / density : 1f;
+        window.SetSize(placed.W, placed.H);
+        window.SetPosition(placed.X, placed.Y);
     }
 
     // Windows takes the window's icon from the exe's (ApplicationIcon), at every size it needs; X11 has
     // only what the window is given.
-    private static unsafe void SetIconFromResource(SdlVulkanWindow window)
+    private static void SetIconFromResource(SdlVulkanWindow window)
     {
-        const int Size = 64;
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("ytplayer-64.rgba");
         if (stream is null)
             return;
-        var pixels = new byte[Size * Size * 4];
-        stream.ReadExactly(pixels);
-        fixed (byte* p = pixels)
-        {
-            // Bytes R, G, B, A: ABGR8888 on a little-endian machine.
-            var surface = CreateSurfaceFrom(Size, Size, PixelFormat.ABGR8888, (nint)p, Size * 4);
-            if (surface == nint.Zero)
-                return;
-            SetWindowIcon(window.Handle, surface);
-            DestroySurface(surface);
-        }
+        var icon = new RgbaImage(64, 64);
+        stream.ReadExactly(icon.Pixels);
+        window.SetIcon(icon);
     }
 
     private static PipLayout CurrentLayout(SdlVulkanWindow window)

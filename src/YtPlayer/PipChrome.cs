@@ -8,7 +8,11 @@ namespace YtPlayer;
 internal sealed class PipChrome(VkRenderer renderer)
 {
     public static readonly RGBAColor32 Background = new(0x18, 0x18, 0x1c, 0xff);
-    private static readonly RGBAColor32 Hover = new(0x33, 0x33, 0x3a, 0xff);
+    /// <summary>The strip and border while the window is the active one, so it is plain when keys go to it
+    /// (an always-on-top window can take them without the user noticing).</summary>
+    public static readonly RGBAColor32 ActiveBackground = new(0x2c, 0x2c, 0x36, 0xff);
+    // Lighter than both backgrounds, so a hovered button still stands out on an active strip.
+    private static readonly RGBAColor32 Hover = new(0x40, 0x40, 0x4a, 0xff);
     private static readonly RGBAColor32 CloseHover = new(0xc4, 0x2b, 0x1c, 0xff);
     private static readonly RGBAColor32 Ink = new(0xd8, 0xd8, 0xdc, 0xff);
     private static readonly RGBAColor32 Accent = new(0xff, 0x30, 0x30, 0xff);

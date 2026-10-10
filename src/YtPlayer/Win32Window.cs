@@ -18,12 +18,24 @@ internal static partial class Win32Window
     /// snapping to the top edge or Win+Up leaves the size alone too.</summary>
     public static void RemoveMaximize(nint sdlWindow)
     {
-        var hwnd = GetPointerProperty(GetWindowProperties(sdlWindow), Props.WindowWin32HWNDPointer, nint.Zero);
+        var hwnd = Handle(sdlWindow);
         if (hwnd == nint.Zero)
             return;
         var style = GetWindowLongPtrW(hwnd, GwlStyle);
         SetWindowLongPtrW(hwnd, GwlStyle, (nint)((long)style & ~WsMaximizeBox));
     }
+
+    /// <summary>The SDL window's HWND.</summary>
+    public static nint Handle(nint sdlWindow)
+        => GetPointerProperty(GetWindowProperties(sdlWindow), Props.WindowWin32HWNDPointer, nint.Zero);
+
+    /// <summary>Whether <paramref name="hwnd"/> is the foreground window, the one keys go to. SDL's own
+    /// input-focus flag will not do: a click into the page moves the keyboard focus to the web view's
+    /// child window, and SDL counts that as losing focus while the window is still the active one.</summary>
+    public static bool IsForeground(nint hwnd) => hwnd != nint.Zero && GetForegroundWindow() == hwnd;
+
+    [LibraryImport("user32.dll")]
+    private static partial nint GetForegroundWindow();
 
     [LibraryImport("user32.dll")]
     private static partial nint GetWindowLongPtrW(nint hwnd, int index);
