@@ -13,7 +13,7 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   `{showing}`, `{paste}`, `{copy}`, `{skipAt}`, `{playing}` from the page (read by `PageMessage`), `{compact}`,
   `{search}`, `{copyLink}`, `{togglePlay}` from the host.
 - `tools/page-check.mjs` drives that script in a headless Edge against live YouTube (search, compact,
-  the keys, paste, miniplayer) with a stub for the host. Run it after touching the script; YouTube's markup
+  the keys, paste, miniplayer, and when YouTube serves one, a real ad's Skip clicked as the host clicks it) with a stub for the host. Run it after touching the script; YouTube's markup
   moves under it.
 - `WindowFit.cs`: the window's two sizes (PiP while compact is on screen, browse otherwise) and where a
   switch puts it. Logical sizes times the content scale: window coordinates are pixels on Windows and X11.

@@ -93,6 +93,20 @@
   var SKIP_BUTTON = '.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern,' +
     ' .ytp-ad-player-overlay-layout__skip-or-preview-container button[class*="skip"]';
   var lastSkipAt = 0;
+  // Where a click would press the button, or null while it is not really shown. YouTube puts the button
+  // in the page before it shows it (one was there at x 0 with no width, 0.6 s into an ad that then ran
+  // its 16 s), and a click there presses nothing. So it must have a size, be visible and opaque, and be
+  // what a click at its centre lands on: the trusted click hits whatever elementFromPoint finds there.
+  // Its box, not offsetParent: that is null for a fixed-position element even when it shows.
+  function skipTarget(skip) {
+    if (skip.disabled) return null;
+    var r = skip.getBoundingClientRect();
+    if (r.width < 8 || r.height < 8) return null;
+    if (skip.checkVisibility && !skip.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return null;
+    var x = r.x + r.width / 2, y = r.y + r.height / 2;
+    var hit = document.elementFromPoint(x, y);
+    return hit && skip.contains(hit) ? { x: x, y: y } : null;
+  }
   // The ad's start and end go to the host too, for its log (did a click skip it, or did it play out).
   var adShowing = false;
   setInterval(function () {
@@ -101,14 +115,16 @@
       adShowing = ad;
       post({ ad: ad });
     }
-    if (!ad) return;
-    var skip = document.querySelector(SKIP_BUTTON);
     // Asked again a second later if the ad is still there, in case a click landed mid-animation.
-    // getClientRects, not offsetParent: that is null for a fixed-position element even when it shows.
-    if (!skip || !skip.getClientRects().length || skip.disabled || Date.now() - lastSkipAt < 1000) return;
-    lastSkipAt = Date.now();
-    var r = skip.getBoundingClientRect();
-    post({ skipAt: { x: r.x + r.width / 2, y: r.y + r.height / 2 } });
+    if (!ad || Date.now() - lastSkipAt < 1000) return;
+    var buttons = document.querySelectorAll(SKIP_BUTTON);
+    for (var i = 0; i < buttons.length; i++) {
+      var at = skipTarget(buttons[i]);
+      if (!at) continue;
+      lastSkipAt = Date.now();
+      post({ skipAt: at });
+      return;
+    }
   }, 500);
 
   // Host <-> page. The host says whether compact mode is on; the page says when it is ready for that,
