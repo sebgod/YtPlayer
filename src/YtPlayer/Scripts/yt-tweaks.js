@@ -88,12 +88,17 @@
   // Set while the search box is open from Ctrl+F. Compact hides the masthead the box lives in, so it
   // steps aside until the next navigation (a search leaves the watch page anyway) or Escape.
   var searching = false;
-  function applyCompact() {
+  // Tells the host whether compact is on screen whenever that changes (the window takes its small
+  // size while it is), and when asked to: in answer to the host's compact state, after every full load.
+  function applyCompact(report) {
     var root = document.documentElement;
     var on = compactWanted && !searching && isWatchPage();
-    if (root.classList.contains('ytpip-compact') === on) return;
-    root.classList.toggle('ytpip-compact', on);
-    window.dispatchEvent(new Event('resize'));
+    var changed = root.classList.contains('ytpip-compact') !== on;
+    if (changed) {
+      root.classList.toggle('ytpip-compact', on);
+      window.dispatchEvent(new Event('resize'));
+    }
+    if (changed || report) post({ showing: on });
   }
   // A video playing on in the hidden miniplayer: YouTube moves its player there on leaving a watch page.
   function miniplayerActive() {
@@ -111,7 +116,7 @@
     // Turned on away from a video while one plays on in the hidden miniplayer: back to its watch page,
     // where compact then shows it. I is YouTube's own key for expanding the miniplayer.
     if (turnedOn && miniplayerActive()) pressKey('i', 'KeyI', 73);
-    applyCompact();
+    applyCompact(true);
   }
 
   // Ctrl+F: YouTube's own search box, not the browser's find bar.
@@ -175,10 +180,10 @@
       }
     });
   } catch (e) { /* no host bridge */ }
-  document.addEventListener('DOMContentLoaded', function () { post({ ready: true, watching: isWatchPage() }); });
+  document.addEventListener('DOMContentLoaded', function () { post({ ready: true }); });
   document.addEventListener('yt-navigate-finish', function () {
     searching = false;
     applyCompact();
-    post({ navigated: location.href, watching: isWatchPage() });
+    post({ navigated: location.href });
   });
 })();

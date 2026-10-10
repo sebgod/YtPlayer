@@ -31,13 +31,43 @@ internal static class Program
         var onTop = settings.OnTop;
 
         using var app = SdlVulkanApp.Create();
-        var window = app.CreateWindow("YtPlayer", settings.Width, settings.Height,
+        // Two sizes, each remembered: the picture in picture while a compact video shows, and a bigger
+        // one to browse in. Unset, they are the logical defaults at the display's scale.
+        var startScale = GetDisplayContentScale(GetPrimaryDisplay()) is > 0 and var s ? s : 1f;
+        var pipSize = settings is { PipWidth: { } pw, PipHeight: { } ph }
+            ? (pw, ph) : WindowFit.Scaled(WindowFit.PipDefault, startScale);
+        var browseSize = settings is { BrowseWidth: { } bw, BrowseHeight: { } bh }
+            ? (bw, bh) : WindowFit.Scaled(WindowFit.BrowseDefault, startScale);
+        // Compact shows from the start only for a video asked for on the command line. Anything else
+        // opens a page to browse; from then on the page says when compact comes on screen or leaves it.
+        var showing = compact && YouTubeUrl.TryGetVideoId(input ?? "", out _, out _);
+        var startSize = showing ? pipSize : browseSize;
+
+        var window = app.CreateWindow("YtPlayer", startSize.Item1, startSize.Item2,
             maximized: false, borderless: true, alwaysOnTop: onTop);
         if (settings is { X: { } x, Y: { } y })
             SetWindowPosition(window.Handle, x, y);
-        SetWindowMinimumSize(window.Handle, 240, 170);
+        window.GetPosition(out var startX, out var startY);
+        Fit(window, new Box(startX, startY, startSize.Item1, startSize.Item2), startSize, showing);
         if (OperatingSystem.IsWindows())
             Win32Window.RemoveMaximize(window.Handle);
+        else
+            SetIconFromResource(window);
+
+        // Compact came on screen or left it: keep the size the window is leaving, take the other.
+        void ShowCompact(bool on)
+        {
+            if (on == showing)
+                return;
+            GetWindowSize(window.Handle, out var w, out var h);
+            if (showing)
+                pipSize = (w, h);
+            else
+                browseSize = (w, h);
+            showing = on;
+            window.GetPosition(out var wx, out var wy);
+            Fit(window, new Box(wx, wy, w, h), on ? pipSize : browseSize, on);
+        }
 
         window.GetSizeInPixels(out var pixelW, out var pixelH);
         var context = VulkanContext.CreateForSharedDevice(app.Device, window.Surface, (uint)pixelW, (uint)pixelH);
@@ -54,8 +84,6 @@ internal static class Program
         web.AddScriptAtDocumentStartAsync(LoadTweaksScript()).ContinueWith(
             t => Console.Error.WriteLine($"[tweaks] not registered: {t.Exception?.GetBaseException().Message}"),
             CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
-        // Whether the page is a watch page, where compact (if on) is showing; the compact button says so.
-        var watching = false;
         web.MessageReceived += json => UiQueue.Enqueue(() =>
         {
             var message = PageMessage.Parse(json);
@@ -63,8 +91,8 @@ internal static class Program
             // document-start script cannot know it.
             if (message.Ready)
                 web.PostMessage(CompactMessage(compact));
-            if (message.Watching is { } w)
-                watching = w;
+            if (message.Showing is { } on)
+                ShowCompact(on);
             if (message.Paste is { } pasted)
                 OpenPastedLink(web, pasted);
         });
@@ -77,7 +105,7 @@ internal static class Program
         var loop = new SdlEventLoop(window, renderer)
         {
             BackgroundColor = PipChrome.Background,
-            OnRender = () => chrome.Draw(_layout, compact, watching, onTop),
+            OnRender = () => chrome.Draw(_layout, compact, showing, onTop),
             OnResize = (_, _) =>
             {
                 _layout = CurrentLayout(window);
@@ -150,8 +178,18 @@ internal static class Program
         loop.Run();
 
         window.GetPosition(out var px, out var py);
-        GetWindowSize(window.Handle, out var w, out var h);
-        new PlayerSettings { X = px, Y = py, Width = w, Height = h, OnTop = onTop, Compact = compact }.Save();
+        GetWindowSize(window.Handle, out var exitW, out var exitH);
+        if (showing)
+            pipSize = (exitW, exitH);
+        else
+            browseSize = (exitW, exitH);
+        new PlayerSettings
+        {
+            X = px, Y = py,
+            PipWidth = pipSize.Item1, PipHeight = pipSize.Item2,
+            BrowseWidth = browseSize.Item1, BrowseHeight = browseSize.Item2,
+            OnTop = onTop, Compact = compact,
+        }.Save();
 
         web.Dispose();
         renderer.Dispose();
@@ -174,6 +212,50 @@ internal static class Program
         const string suffix = " - YouTube";
         var title = pageTitle.EndsWith(suffix, StringComparison.Ordinal) ? pageTitle[..^suffix.Length] : pageTitle;
         return string.IsNullOrWhiteSpace(title) ? "YtPlayer" : title;
+    }
+
+    // Sets the mode's minimum, then sizes and places the window in place of current, on its display.
+    private static void Fit(SdlVulkanWindow window, Box current, (int W, int H) size, bool pip)
+    {
+        var min = WindowFit.Scaled(pip ? WindowFit.PipMinimum : WindowFit.BrowseMinimum, ContentScale(window));
+        SetWindowMinimumSize(window.Handle, min.W, min.H);
+        var target = (Math.Max(size.W, min.W), Math.Max(size.H, min.H));
+        var usable = GetDisplayUsableBounds(GetDisplayForWindow(window.Handle), out var r)
+            ? new Box(r.X, r.Y, r.W, r.H)
+            : current with { W = int.MaxValue / 4, H = int.MaxValue / 4 };
+        var placed = WindowFit.Place(current, target, usable);
+        SetWindowSize(window.Handle, placed.W, placed.H);
+        SetWindowPosition(window.Handle, placed.X, placed.Y);
+    }
+
+    // Logical units to window coordinates: window coordinates are pixels on Windows and X11, so this is
+    // the display's scale; where they are points (pixel density above 1), it divides back out.
+    private static float ContentScale(SdlVulkanWindow window)
+    {
+        var display = GetWindowDisplayScale(window.Handle);
+        var density = GetWindowPixelDensity(window.Handle);
+        return display > 0 && density > 0 ? display / density : 1f;
+    }
+
+    // Windows takes the window's icon from the exe's (ApplicationIcon), at every size it needs; X11 has
+    // only what the window is given.
+    private static unsafe void SetIconFromResource(SdlVulkanWindow window)
+    {
+        const int Size = 64;
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("ytplayer-64.rgba");
+        if (stream is null)
+            return;
+        var pixels = new byte[Size * Size * 4];
+        stream.ReadExactly(pixels);
+        fixed (byte* p = pixels)
+        {
+            // Bytes R, G, B, A: ABGR8888 on a little-endian machine.
+            var surface = CreateSurfaceFrom(Size, Size, PixelFormat.ABGR8888, (nint)p, Size * 4);
+            if (surface == nint.Zero)
+                return;
+            SetWindowIcon(window.Handle, surface);
+            DestroySurface(surface);
+        }
     }
 
     private static PipLayout CurrentLayout(SdlVulkanWindow window)

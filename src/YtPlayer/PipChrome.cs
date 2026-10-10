@@ -16,8 +16,8 @@ internal sealed class PipChrome(VkRenderer renderer)
     public PipButton Hovered { get; set; }
 
     /// <param name="compact">Compact is on (the user's choice).</param>
-    /// <param name="watching">The page is a watch page, so compact, if on, is showing.</param>
-    public void Draw(PipLayout layout, bool compact, bool watching, bool onTop)
+    /// <param name="showing">Compact is on screen (a watch page, not searching).</param>
+    public void Draw(PipLayout layout, bool compact, bool showing, bool onTop)
     {
         if (layout.Width <= 0)
             return;
@@ -49,7 +49,7 @@ internal sealed class PipChrome(VkRenderer renderer)
                     // Compact on away from a video only outlines it: it waits for the next video.
                     renderer.DrawRectangle(Rect(cx - u * 1.3f, cy - u, u * 2.6f, u * 2), Ink, t);
                     var picture = Rect(cx, cy, u * 1.1f, u * 0.8f);
-                    if (compact && watching)
+                    if (compact && showing)
                         renderer.FillRectangle(picture, Accent);
                     else if (compact)
                         renderer.DrawRectangle(picture, Accent, t);

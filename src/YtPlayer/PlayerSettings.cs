@@ -3,13 +3,19 @@ using System.Text.Json.Serialization;
 
 namespace YtPlayer;
 
-/// <summary>What the player remembers between runs: where the window was, how big, and its modes.</summary>
+/// <summary>What the player remembers between runs: where the window was, its two sizes, and its modes.
+/// Sizes are in window coordinates; unset, they come from <see cref="WindowFit"/>'s defaults, scaled
+/// for the display.</summary>
 internal sealed record PlayerSettings
 {
     public int? X { get; init; }
     public int? Y { get; init; }
-    public int Width { get; init; } = 480;
-    public int Height { get; init; } = 300;
+    /// <summary>The size while a compact video shows.</summary>
+    public int? PipWidth { get; init; }
+    public int? PipHeight { get; init; }
+    /// <summary>The size for browsing (anything that is not a compact video).</summary>
+    public int? BrowseWidth { get; init; }
+    public int? BrowseHeight { get; init; }
     public bool OnTop { get; init; } = true;
     public bool Compact { get; init; } = true;
 

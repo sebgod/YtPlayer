@@ -6,12 +6,13 @@ public class PageMessageTests
 {
     [Fact]
     public void ReadyAsksForTheCompactState()
-        => PageMessage.Parse("""{"ready":true,"watching":false}""").ShouldBe(new PageMessage(true, false, null));
+        => PageMessage.Parse("""{"ready":true}""").ShouldBe(new PageMessage(true, null, null));
 
-    [Fact]
-    public void ANavigationSaysWhetherItIsAWatchPage()
-        => PageMessage.Parse("""{"navigated":"https://www.youtube.com/watch?v=dQw4w9WgXcQ","watching":true}""")
-            .ShouldBe(new PageMessage(false, true, null));
+    [Theory]
+    [InlineData("""{"showing":true}""", true)]
+    [InlineData("""{"showing":false}""", false)]
+    public void ShowingSaysWhetherCompactIsOnScreen(string json, bool showing)
+        => PageMessage.Parse(json).ShouldBe(new PageMessage(false, showing, null));
 
     [Fact]
     public void APasteCarriesItsText()
@@ -21,6 +22,7 @@ public class PageMessageTests
     [Theory]
     [InlineData("not json")]
     [InlineData("\"a string\"")]
-    [InlineData("""{"watching":"yes","paste":42}""")]
+    [InlineData("""{"navigated":"https://www.youtube.com/"}""")]
+    [InlineData("""{"showing":"yes","paste":42}""")]
     public void AnythingElseReadsAsEmpty(string json) => PageMessage.Parse(json).ShouldBe(default);
 }
