@@ -2,7 +2,7 @@ using static SDL3.SDL;
 
 namespace YtPlayer;
 
-public enum PipButton { None, Back, Compact, Pin, Close }
+public enum PipButton { None, Back, PlayPause, Collapse, Compact, Pin, Close }
 
 /// <summary>An integer rectangle in window points (SDL's window coordinates).</summary>
 internal readonly record struct Box(int X, int Y, int W, int H)
@@ -12,35 +12,49 @@ internal readonly record struct Box(int X, int Y, int W, int H)
 
 /// <summary>
 /// The player window's geometry, in window points: a title strip along the top that drags the window
-/// and holds the buttons, the web view below it, and a thin border around the rest that resizes. The
-/// window is borderless, so <see cref="HitTest"/> is what gives it the OS's move and resize; the web view
-/// covers its own box and takes its own input, so only the strip and the border reach this.
+/// and holds the buttons and the title, the web view below it, and a thin border around the rest that
+/// resizes. The window is borderless, so <see cref="HitTest"/> is what gives it the OS's move and resize;
+/// the web view covers its own box and takes its own input, so only the strip and the border reach this.
+/// <see cref="Collapsed"/>, the window is the strip alone (<see cref="CollapsedHeight"/> tall): no web
+/// view, and nothing resizes, as there is nothing to resize to.
 /// </summary>
-internal readonly record struct PipLayout(int Width, int Height)
+internal readonly record struct PipLayout(int Width, int Height, bool Collapsed = false)
 {
     public const int StripHeight = 28;
     public const int Border = 4;
     public const int ButtonWidth = 34;
     /// <summary>How far from a corner, along either edge, a resize takes the corner.</summary>
     public const int CornerGrip = 14;
+    /// <summary>The window's height while collapsed: the strip, and the border under it.</summary>
+    public const int CollapsedHeight = StripHeight + Border;
+    private const int TitlePadding = 6;
 
-    public Box WebView => new(Border, StripHeight, Math.Max(0, Width - 2 * Border), Math.Max(0, Height - StripHeight - Border));
+    public Box WebView => Collapsed
+        ? default
+        : new(Border, StripHeight, Math.Max(0, Width - 2 * Border), Math.Max(0, Height - StripHeight - Border));
+
+    /// <summary>Where the title goes: the strip between the two buttons on the left and the four on the right.</summary>
+    public Box Title => new(2 * ButtonWidth + TitlePadding, 0,
+        Math.Max(0, Width - 6 * ButtonWidth - 2 * TitlePadding), StripHeight);
 
     public Box ButtonBox(PipButton button) => button switch
     {
         PipButton.Back => new(0, 0, ButtonWidth, StripHeight),
+        PipButton.PlayPause => new(ButtonWidth, 0, ButtonWidth, StripHeight),
         PipButton.Close => new(Width - ButtonWidth, 0, ButtonWidth, StripHeight),
         PipButton.Pin => new(Width - 2 * ButtonWidth, 0, ButtonWidth, StripHeight),
         PipButton.Compact => new(Width - 3 * ButtonWidth, 0, ButtonWidth, StripHeight),
+        PipButton.Collapse => new(Width - 4 * ButtonWidth, 0, ButtonWidth, StripHeight),
         _ => default,
     };
 
-    public static ReadOnlySpan<PipButton> Buttons => [PipButton.Back, PipButton.Compact, PipButton.Pin, PipButton.Close];
+    public static ReadOnlySpan<PipButton> Buttons =>
+        [PipButton.Back, PipButton.PlayPause, PipButton.Collapse, PipButton.Compact, PipButton.Pin, PipButton.Close];
 
     public PipButton ButtonAt(float x, float y)
     {
-        // The top Border rows resize, so a button starts below them.
-        if (y < Border)
+        // The top Border rows resize, so a button starts below them (collapsed, nothing resizes).
+        if (y < Border && !Collapsed)
             return PipButton.None;
         foreach (var button in Buttons)
             if (ButtonBox(button).Contains(x, y))
@@ -50,6 +64,9 @@ internal readonly record struct PipLayout(int Width, int Height)
 
     public HitTestResult HitTest(float x, float y)
     {
+        if (Collapsed)
+            return ButtonAt(x, y) != PipButton.None ? HitTestResult.Normal : HitTestResult.Draggable;
+
         var left = x < Border;
         var right = x >= Width - Border;
         var top = y < Border;

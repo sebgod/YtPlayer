@@ -32,6 +32,9 @@ internal static class Program
         var onTop = settings.OnTop;
 
         using var app = SdlVulkanApp.Create();
+        // SDL drops the click that activates a window by default, so on an inactive window the first
+        // click on a strip button (close, back) only activated it. A floating player should act at once.
+        SetHint(Hints.MouseFocusClickthrough, "1");
         // Two sizes, each remembered: the picture in picture while a compact video shows, and a bigger
         // one to browse in. Unset, they are the logical defaults at the display's scale.
         var startScale = GetDisplayContentScale(GetPrimaryDisplay()) is > 0 and var s ? s : 1f;
@@ -56,14 +59,24 @@ internal static class Program
         if (!OperatingSystem.IsWindows())
             SetIconFromResource(window);
 
+        // Collapsed to the strip alone (the collapse button), and the size it unfolds back to.
+        var collapsed = false;
+        var expanded = startSize;
+        (int W, int H) Size()
+        {
+            GetWindowSize(window.Handle, out var w, out var h);
+            return collapsed ? expanded : (w, h);
+        }
+
         // Compact came on screen or left it: keep the height the window is leaving and take the other
-        // mode's, with the width it has now, so it stays in place (WindowFit.Switch).
+        // mode's, with the width it has now, so it stays in place (WindowFit.Switch). Collapsed, only the
+        // size it will unfold to changes; the window stays a strip.
         int? narrowPipWidth = null;
         void ShowCompact(bool on)
         {
             if (on == showing)
                 return;
-            GetWindowSize(window.Handle, out var w, out var h);
+            var (w, h) = Size();
             if (showing)
                 pipSize = (w, h);
             else
@@ -72,6 +85,11 @@ internal static class Program
             var browseMinimumWidth = WindowFit.Scaled(WindowFit.BrowseMinimum, window.DisplayScale).W;
             (var size, narrowPipWidth) = WindowFit.Switch(
                 on, w, (on ? pipSize : browseSize).Item2, browseMinimumWidth, narrowPipWidth);
+            if (collapsed)
+            {
+                expanded = size;
+                return;
+            }
             window.GetPosition(out var wx, out var wy);
             Fit(window, new Box(wx, wy, w, h), size, on);
         }
@@ -79,13 +97,16 @@ internal static class Program
         window.GetSizeInPixels(out var pixelW, out var pixelH);
         var context = VulkanContext.CreateForSharedDevice(app.Device, window.Surface, (uint)pixelW, (uint)pixelH);
         var renderer = new VkRenderer(context, (uint)pixelW, (uint)pixelH);
-        var chrome = new PipChrome(renderer);
-        _layout = CurrentLayout(window);
+        var chrome = new PipChrome(renderer, TitleFont());
+        _layout = CurrentLayout(window, collapsed);
 
         _hitTest = (nint _, in Point area, nint _) => _layout.HitTest(area.X, area.Y);
         SetWindowHitTest(window.Handle, _hitTest, nint.Zero);
 
         var web = NativeWebView.Create(new NativeWebViewOptions { UserDataFolder = PlayerSettings.WebProfileFolder });
+        // The strip shows the page's title, and play or pause as the page's video does.
+        string? stripTitle = null;
+        var playing = false;
         // Not awaited: registered before the attach, it completes only after it, and the first
         // navigation waits for it anyway. Watched only so a refusal is not silent.
         web.AddScriptAtDocumentStartAsync(LoadTweaksScript()).ContinueWith(
@@ -106,21 +127,58 @@ internal static class Program
                 SetClipboardText(link);
             if (message.SkipAt is { } skip)
                 ClickInPage(web, skip.X, skip.Y);
+            if (message.Playing is { } p)
+                playing = p;
         });
-        web.TitleChanged += title => UiQueue.Enqueue(() => window.SetTitle(TitleFor(title)));
+        web.TitleChanged += title => UiQueue.Enqueue(() =>
+        {
+            stripTitle = TitleFor(title);
+            window.SetTitle(stripTitle);
+        });
         web.PageError += error => Console.Error.WriteLine($"[page] {error}");
         web.AttachToWindow(window);
         web.SetBounds(WebViewPixels(_layout, window));
         web.Navigate(startUrl);
 
+        // The collapse button: fold the window to its strip, the video playing on behind it, and unfold
+        // it to the size it had. The corner nearest the screen's corner stays put either way.
+        void SetCollapsed(bool on)
+        {
+            if (on == collapsed)
+                return;
+            GetWindowSize(window.Handle, out var w, out var h);
+            window.GetPosition(out var wx, out var wy);
+            var current = new Box(wx, wy, w, h);
+            collapsed = on;
+            if (on)
+            {
+                expanded = (w, h);
+                // Hidden rather than sized to nothing: an X11 window cannot be 0 pixels tall.
+                web.SetVisible(false);
+                var minimumWidth = WindowFit.Scaled(showing ? WindowFit.PipMinimum : WindowFit.BrowseMinimum,
+                    window.DisplayScale).W;
+                window.SetMinimumSize(minimumWidth, PipLayout.CollapsedHeight);
+                Place(window, current, (w, PipLayout.CollapsedHeight));
+            }
+            else
+            {
+                Fit(window, current, expanded, showing);
+                web.SetVisible(true);
+            }
+            _layout = CurrentLayout(window, collapsed);
+            if (!collapsed)
+                web.SetBounds(WebViewPixels(_layout, window));
+        }
+
         var loop = new SdlEventLoop(window, renderer)
         {
             BackgroundColor = PipChrome.Background,
-            OnRender = () => chrome.Draw(_layout, compact, showing, onTop),
+            OnRender = () => chrome.Draw(_layout, new ChromeState(compact, showing, onTop, playing, stripTitle)),
             OnResize = (_, _) =>
             {
-                _layout = CurrentLayout(window);
-                web.SetBounds(WebViewPixels(_layout, window));
+                _layout = CurrentLayout(window, collapsed);
+                if (!collapsed)
+                    web.SetBounds(WebViewPixels(_layout, window));
             },
             OnMouseMove = (mx, my) =>
             {
@@ -163,6 +221,12 @@ internal static class Program
                     case PipButton.Back:
                         _ = web.ExecuteScriptAsync("history.back()");
                         break;
+                    case PipButton.PlayPause:
+                        web.PostMessage("""{"togglePlay":true}""");
+                        break;
+                    case PipButton.Collapse:
+                        SetCollapsed(!collapsed);
+                        break;
                     case PipButton.Compact:
                         compact = !compact;
                         web.PostMessage(CompactMessage(compact));
@@ -178,8 +242,9 @@ internal static class Program
                         return false;
                 }
                 // A click on the strip leaves the keyboard on the strip; hand it back to the page, so
-                // the next key (space, Ctrl+F) reaches the video.
-                web.Focus();
+                // the next key (space, Ctrl+F) reaches the video. Collapsed, there is no page to give it to.
+                if (!collapsed)
+                    web.Focus();
                 return true;
             },
         };
@@ -200,7 +265,7 @@ internal static class Program
                 loop.BackgroundColor = active ? PipChrome.ActiveBackground : PipChrome.Background;
                 // However the window was activated (a click on the strip or border, the taskbar,
                 // Alt+Tab), the keys are for the page, not the strip.
-                if (active)
+                if (active && !collapsed)
                     web.Focus();
                 any = true;
             }
@@ -211,7 +276,7 @@ internal static class Program
         loop.Run();
 
         window.GetPosition(out var px, out var py);
-        GetWindowSize(window.Handle, out var exitW, out var exitH);
+        var (exitW, exitH) = Size();
         if (showing)
             pipSize = (exitW, exitH);
         else
@@ -266,6 +331,20 @@ internal static class Program
         return string.IsNullOrWhiteSpace(title) ? "YtPlayer" : title;
     }
 
+    // A font for the strip's title: the platform's own face. Null, if there is none to be had, leaves the
+    // title out rather than failing the start.
+    private static string? TitleFont()
+    {
+        try
+        {
+            return FontResolver.ResolveSystemFont() is { Length: > 0 } path && File.Exists(path) ? path : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
     // Sets the mode's minimum, then sizes and places the window in place of current, on its display.
     private static void Fit(SdlVulkanWindow window, Box current, (int W, int H) size, bool pip)
     {
@@ -273,11 +352,16 @@ internal static class Program
         // logical sizes scale by the display's scale.
         var min = WindowFit.Scaled(pip ? WindowFit.PipMinimum : WindowFit.BrowseMinimum, window.DisplayScale);
         window.SetMinimumSize(min.W, min.H);
-        var target = (Math.Max(size.W, min.W), Math.Max(size.H, min.H));
+        Place(window, current, (Math.Max(size.W, min.W), Math.Max(size.H, min.H)));
+    }
+
+    // Sizes and places the window in place of current, on its display (WindowFit.Place).
+    private static void Place(SdlVulkanWindow window, Box current, (int W, int H) size)
+    {
         var usable = window.TryGetUsableDisplayBounds(out var ux, out var uy, out var uw, out var uh)
             ? new Box(ux, uy, uw, uh)
             : current with { W = int.MaxValue / 4, H = int.MaxValue / 4 };
-        var placed = WindowFit.Place(current, target, usable);
+        var placed = WindowFit.Place(current, size, usable);
         window.SetSize(placed.W, placed.H);
         window.SetPosition(placed.X, placed.Y);
     }
@@ -294,10 +378,10 @@ internal static class Program
         window.SetIcon(icon);
     }
 
-    private static PipLayout CurrentLayout(SdlVulkanWindow window)
+    private static PipLayout CurrentLayout(SdlVulkanWindow window, bool collapsed)
     {
         GetWindowSize(window.Handle, out var w, out var h);
-        return new PipLayout(w, h);
+        return new PipLayout(w, h, collapsed);
     }
 
     // The layout is in window points; the web view is placed in pixels.

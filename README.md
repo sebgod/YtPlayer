@@ -17,6 +17,9 @@ ytplayer lofi beats                         # a search
 
 - **The strip along the top drags the window**; the thin border around it resizes, corners included.
 - **Back** (`<`) goes back a page.
+- **Play/pause** (beside it): ▶ while paused, ❚❚ while playing; it follows the video, media keys included.
+- **The title** of what is on, in the strip between the buttons.
+- **Collapse** (the chevron) folds the window to its strip, the video playing on; again unfolds it to the size it had.
 - **Compact** (the screen icon) shows the video alone, filling the window, with YouTube's own controls.
   Turn it off to browse. It applies only on a video's page: anywhere else YouTube shows as usual, and
   compact takes over when you open a video (the icon's red picture is outlined while it waits, filled
@@ -24,6 +27,9 @@ ytplayer lofi beats                         # a search
   the background; turning compact on brings it back.
 - **Stay on top** (the dot): red while the window floats above others.
 - **Close** (`×`).
+
+The buttons act on the first click even while another window is active. While the window is active its strip
+is a lighter grey, and keys go to the page, so space or Ctrl+F reach the video after a click on the strip.
 
 The window has **two sizes**: small while a compact video shows, bigger to browse and search in. It
 switches between them as compact comes and goes, keeping the corner nearest the screen's corner in place,

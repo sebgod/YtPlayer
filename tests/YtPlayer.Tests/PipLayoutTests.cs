@@ -29,6 +29,8 @@ public class PipLayoutTests
 
     [Theory]
     [InlineData(17, 14, PipButton.Back)]
+    [InlineData(50, 14, PipButton.PlayPause)]
+    [InlineData(360, 14, PipButton.Collapse)]
     [InlineData(400, 14, PipButton.Compact)]
     [InlineData(430, 14, PipButton.Pin)]
     [InlineData(465, 14, PipButton.Close)]
@@ -36,6 +38,24 @@ public class PipLayoutTests
     [InlineData(465, 100, PipButton.None)]
     public void EachButtonIsWhereItIsDrawn(float x, float y, PipButton expected)
         => Layout.ButtonAt(x, y).ShouldBe(expected);
+
+    [Fact]
+    public void TheTitleSitsBetweenTheButtons()
+        => Layout.Title.ShouldBe(new Box(74, 0, 264, 28)); // 68 + 6 to 344 - 6
+
+    private static readonly PipLayout Collapsed = new(480, PipLayout.CollapsedHeight, Collapsed: true);
+
+    [Fact]
+    public void CollapsedThereIsNoWebView() => Collapsed.WebView.ShouldBe(default);
+
+    [Theory]
+    [InlineData(200, 14, HitTestResult.Draggable)]
+    [InlineData(200, 1, HitTestResult.Draggable)] // the top edge, which resizes when not collapsed
+    [InlineData(478, 30, HitTestResult.Draggable)]
+    [InlineData(200, 31, HitTestResult.Draggable)]
+    [InlineData(465, 2, HitTestResult.Normal)] // the close button, right up to the top edge
+    public void CollapsedTheStripDragsAndNothingResizes(float x, float y, HitTestResult expected)
+        => Collapsed.HitTest(x, y).ShouldBe(expected);
 
     [Fact]
     public void AButtonIsNotADragHandle()

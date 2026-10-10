@@ -83,6 +83,15 @@ check('result: compact applies on the watch page', s.compact);
 check('result: reports showing:true', s.posted.some(m => m.showing === true), s.posted);
 check('result: video plays', s.video && !s.video.paused, s.video);
 
+// 3a. Play state for the strip's button: the page reports it, and the host's toggle pauses the player.
+check('result: reports playing:true', s.posted.some(m => m.playing === true), s.posted.filter(m => 'playing' in m));
+await evaluate(`window.__posted.length = 0; window.__host({ togglePlay: true })`); await sleep(500);
+s = await state();
+check('togglePlay pauses the player and reports playing:false', s.video?.paused === true && s.posted.some(m => m.playing === false), { video: s.video, posted: s.posted });
+await evaluate(`window.__posted.length = 0; window.__host({ togglePlay: true })`); await sleep(800);
+s = await state();
+check('togglePlay again resumes it', s.video?.paused === false && s.posted.some(m => m.playing === true), { video: s.video, posted: s.posted });
+
 // 3b. Ctrl+C with nothing selected copies the video's link; Ctrl+Shift+C, the link at the current time.
 const videoId = await evaluate(`new URLSearchParams(location.search).get('v')`);
 await evaluate(`window.getSelection().removeAllRanges(); window.__posted.length = 0`);

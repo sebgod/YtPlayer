@@ -252,11 +252,21 @@
       if (d && d.search) startSearch();
       if (d && d.copyLink) copyLink(d.copyLink === 'time');
       if (d && d.togglePlay) {
-        var v = document.querySelector('video');
+        // The player's video, wherever it is (the hidden miniplayer too), not a hover preview's.
+        var v = document.querySelector('#movie_player video');
         if (v) { if (v.paused) v.play(); else v.pause(); }
       }
     });
   } catch (e) { /* no host bridge */ }
+  // Whether the player's video plays, for the strip's play/pause button. Media events do not bubble, but
+  // a capturing listener on the document still sees them; a hover preview's video is not the player's.
+  function reportPlaying(e) {
+    var v = e.target;
+    if (v && v.tagName === 'VIDEO' && v.closest('#movie_player')) post({ playing: !v.paused && !v.ended });
+  }
+  ['playing', 'pause', 'ended', 'emptied'].forEach(function (type) {
+    document.addEventListener(type, reportPlaying, true);
+  });
   document.addEventListener('DOMContentLoaded', function () { post({ ready: true }); });
   document.addEventListener('yt-navigate-finish', function () {
     searching = false;

@@ -29,6 +29,12 @@ public class PageMessageTests
         => PageMessage.Parse("""{"skipAt":{"x":556.72,"y":279.33}}""").SkipAt.ShouldBe((556.72, 279.33));
 
     [Theory]
+    [InlineData("""{"playing":true}""", true)]
+    [InlineData("""{"playing":false}""", false)]
+    public void PlayingSaysWhetherTheVideoPlays(string json, bool playing)
+        => PageMessage.Parse(json).Playing.ShouldBe(playing);
+
+    [Theory]
     [InlineData("not json")]
     [InlineData("\"a string\"")]
     [InlineData("""{"navigated":"https://www.youtube.com/"}""")]
