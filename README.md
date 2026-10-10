@@ -13,6 +13,13 @@ ytplayer dQw4w9WgXcQ                        # the same, by id
 ytplayer lofi beats                         # a search
 ```
 
+## Download
+
+Windows builds are on the [releases page](https://github.com/sebgod/YtPlayer/releases): `win-x64` for most
+PCs, `win-arm64` for ARM ones (Snapdragon). Unzip anywhere and run `ytplayer.exe`; it is a native exe,
+no .NET needed. It needs the Edge WebView2 Runtime, which Windows 10 and 11 already have, and a Vulkan
+driver. The exe is not signed, so SmartScreen may ask before the first run ("More info", then "Run anyway").
+
 ## The window
 
 - **The strip along the top drags the window**; the thin border around it resizes, corners included.
@@ -74,6 +81,12 @@ dotnet run --project src/YtPlayer -f net10.0-windows   # Windows
 dotnet run --project src/YtPlayer -f net10.0           # Linux
 dotnet test --project tests/YtPlayer.Tests
 ```
+
+A release is a tag: `git tag v0.1.1 && git push origin v0.1.1` on main publishes both Windows builds (native
+AOT) and attaches them to that tag's GitHub Release ([`release.yml`](.github/workflows/release.yml)). To try
+the same publish locally:
+`dotnet publish src/YtPlayer -f net10.0-windows -r win-x64 -c Release` (or `win-arm64`; it needs the C++
+build tools for that architecture).
 
 With a checkout of SdlVulkan.Renderer next to this one (`../SdlVulkan.Renderer`), the build uses it instead
 of the NuGet package (`-p:UseLocalSiblings=false` to opt out). That checkout's core project also targets
