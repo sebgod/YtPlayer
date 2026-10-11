@@ -11,6 +11,7 @@ ytplayer                                    # YouTube's home page
 ytplayer https://youtu.be/dQw4w9WgXcQ       # a video, compact
 ytplayer dQw4w9WgXcQ                        # the same, by id
 ytplayer lofi beats                         # a search
+ytplayer --start-minimised                  # out of sight until Win+/ (for a login item)
 ```
 
 ## Download
@@ -20,9 +21,13 @@ PCs, `win-arm64` for ARM ones (Snapdragon). Unzip anywhere and run `ytplayer.exe
 no .NET needed. It needs the Edge WebView2 Runtime, which Windows 10 and 11 already have, and a Vulkan
 driver. The exe is not signed, so SmartScreen may ask before the first run ("More info", then "Run anyway").
 
+To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` in the Startup folder
+(Win+R, `shell:startup`): it starts out of sight, and Win+/ brings it up.
+
 ## The window
 
 - **The strip along the top drags the window**; the thin border around it resizes, corners included.
+  Double-click it to fold the window to the strip, and again to unfold it (Windows).
 - **Back** (`<`) goes back a page.
 - **Play/pause** (beside it): ▶ while paused, ❚❚ while playing; it follows the video, media keys included.
 - **The title** of what is on, in the strip between the buttons.
@@ -35,6 +40,8 @@ driver. The exe is not signed, so SmartScreen may ask before the first run ("Mor
 - **Stay on top** (the dot): red while the window floats above others.
 - **Close** (`×`).
 
+The taskbar icon turns red, with an equalizer in its little picture, while the video plays.
+
 The buttons act on the first click even while another window is active. While the window is active its strip
 is a lighter grey, and keys go to the page, so space or Ctrl+F reach the video after a click on the strip.
 
@@ -44,7 +51,8 @@ and remembers each size, as you last left it, between runs; so are its position 
 
 | Key | |
 | --- | --- |
-| **Win+/** | from any app: the player comes forward (unfolded if collapsed) with YouTube's search box open. Windows only |
+| **Win+/** | from any app: the player comes forward with the keyboard, shown again if hidden. Windows only |
+| **Ctrl+H** | hides the window, off the taskbar and Alt+Tab too, the video playing on; Win+/ brings it back (if another app holds Win+/, it only minimizes) |
 | **Ctrl+F** | YouTube's search box (on a compact video, compact steps aside until you pick a result or press Esc) |
 | **Ctrl+V** | opens a YouTube link from the clipboard: a video, Short, playlist or channel; `youtu.be/…` without `https://` too |
 | **Ctrl+C** | with nothing selected, copies the video's link (`https://youtu.be/…`); with a selection, a normal copy |

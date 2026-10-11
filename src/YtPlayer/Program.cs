@@ -14,17 +14,21 @@ namespace YtPlayer;
 /// in the platform's web view (WebView2 on Windows, WebKitGTK on Linux) under a thin strip that drags
 /// the window and holds four buttons: back, compact (the video alone), stay on top, close.
 /// </summary>
-/// <remarks>Usage: <c>ytplayer [video URL | video id | search words]</c>.</remarks>
+/// <remarks>Usage: <c>ytplayer [--start-minimised] [video URL | video id | search words]</c>.</remarks>
 internal static class Program
 {
     private static readonly ConcurrentQueue<Action> UiQueue = new();
     private static PipLayout _layout;
     private static HitTest? _hitTest; // held for as long as SDL may call it
+    private const int SummonHotKey = 1; // Win+/
 
     [STAThread] // WebView2 requires an STA thread
     private static int Main(string[] args)
     {
         var settings = PlayerSettings.Load();
+        // --start-minimised: start out of sight, as Ctrl+H leaves the window, for Win+/ to bring up (a login item).
+        var startHidden = args.Any(IsStartMinimised);
+        args = [.. args.Where(a => !IsStartMinimised(a))];
         var input = args.Length > 0 ? string.Join(' ', args) : null;
         var startUrl = YouTubeUrl.ToStartUrl(input);
         // A video asked for on the command line opens compact; otherwise the last mode is kept.
@@ -48,16 +52,30 @@ internal static class Program
         var startSize = showing ? pipSize : browseSize;
 
         var window = app.CreateWindow("YtPlayer", startSize.Item1, startSize.Item2,
-            maximized: false, borderless: true, alwaysOnTop: onTop);
+            maximized: false, borderless: true, alwaysOnTop: onTop, hidden: startHidden);
         if (settings is { X: { } x, Y: { } y })
             window.SetPosition(x, y);
         window.GetPosition(out var startX, out var startY);
         Fit(window, new Box(startX, startY, startSize.Item1, startSize.Item2), startSize, showing);
         // The strip is a caption to Windows (the hit test says so), and a double-click on a caption
-        // maximizes: a picture-in-picture window has no use for that.
+        // maximizes: a picture-in-picture window has no use for that. The double-click folds it instead.
         window.SetMaximizable(false);
-        if (!OperatingSystem.IsWindows())
-            SetIconFromResource(window);
+        // Win+/ from whichever app is active brings the player forward (Windows only for now). Without it a
+        // hidden window could not come back, so then Ctrl+H and --start-minimised only minimize it.
+        var summonable = window.TryRegisterGlobalHotKey(SummonHotKey, Keymod.GUI, Keycode.Slash);
+        if (!summonable && OperatingSystem.IsWindows())
+            PlayerLog.Write("Win+/ is not available: another app holds it");
+        if (startHidden && !summonable)
+        {
+            window.Show();
+            window.Minimize();
+        }
+        // The window's icon says whether the video plays. Windows starts from the exe's own (ApplicationIcon);
+        // X11 has only what the window is given.
+        var idleIcon = LoadIcon("ytplayer-64.rgba");
+        var playingIcon = LoadIcon("ytplayer-playing-64.rgba");
+        if (!OperatingSystem.IsWindows() && idleIcon is not null)
+            window.SetIcon(idleIcon);
 
         // Collapsed to the strip alone (the collapse button), and the size it unfolds back to.
         var collapsed = false;
@@ -133,8 +151,14 @@ internal static class Program
                 PlayerLog.Write(adLog.SkipOffered(System.DateTime.Now, skip.X, skip.Y, canClick: OperatingSystem.IsWindows()));
                 ClickInPage(web, skip.X, skip.Y);
             }
-            if (message.Playing is { } p)
+            if (message.Playing is { } p && p != playing)
+            {
                 playing = p;
+                if ((p ? playingIcon : idleIcon) is { } icon)
+                    window.SetIcon(icon);
+            }
+            if (message.Hide)
+                Hide();
         });
         web.TitleChanged += title => UiQueue.Enqueue(() =>
         {
@@ -145,6 +169,16 @@ internal static class Program
         web.AttachToWindow(window);
         web.SetBounds(WebViewPixels(_layout, window));
         web.Navigate(startUrl);
+
+        // Ctrl+H: out of sight, off the taskbar and Alt+Tab too, the video playing on; Win+/ brings it back.
+        // With no Win+/ to do that, it is only minimized.
+        void Hide()
+        {
+            if (summonable)
+                window.Hide();
+            else
+                window.Minimize();
+        }
 
         // The collapse button: fold the window to its strip, the video playing on behind it, and unfold
         // it to the size it had. The corner nearest the screen's corner stays put either way.
@@ -163,8 +197,9 @@ internal static class Program
                 web.SetVisible(false);
                 var minimumWidth = WindowFit.Scaled(showing ? WindowFit.PipMinimum : WindowFit.BrowseMinimum,
                     window.DisplayScale).W;
-                window.SetMinimumSize(minimumWidth, PipLayout.CollapsedHeight);
-                Place(window, current, (w, PipLayout.CollapsedHeight));
+                var collapsedHeight = PipLayout.CollapsedHeightAt(window.DisplayScale);
+                window.SetMinimumSize(minimumWidth, collapsedHeight);
+                Place(window, current, (w, collapsedHeight));
             }
             else
             {
@@ -216,6 +251,9 @@ internal static class Program
                         return true;
                     case (InputModifier.Ctrl, InputKey.P):
                         web.PostMessage("""{"togglePlay":"key"}""");
+                        return true;
+                    case (InputModifier.Ctrl, InputKey.H):
+                        Hide();
                         return true;
                     default:
                         return false;
@@ -282,22 +320,28 @@ internal static class Program
                 loop.RequestRedraw();
         };
 
-        // Win+/ from whichever app is active: the player comes forward, unfolded, with YouTube's search box
-        // open. The press is what lets a window in the background take the foreground. Windows only for now.
-        const int SearchHotKey = 1;
-        if (window.TryRegisterGlobalHotKey(SearchHotKey, Keymod.GUI, Keycode.Slash))
+        // Win+/ from whichever app is active: the player comes forward, hidden, minimized or behind others, with
+        // the keyboard (the page's, unless it is folded to its strip). The press is what lets a window in the
+        // background take the foreground.
+        if (summonable)
             loop.OnGlobalHotKey = id =>
             {
-                if (id != SearchHotKey)
+                if (id != SummonHotKey)
                     return;
-                SetCollapsed(false);
+                if (window.IsHidden)
+                    window.Show();
+                if (window.IsMinimized)
+                    window.Restore();
                 window.Raise();
-                web.Focus();
-                web.PostMessage("""{"search":true}""");
+                if (!collapsed)
+                    web.Focus();
                 loop.RequestRedraw();
             };
-        else if (OperatingSystem.IsWindows())
-            PlayerLog.Write("Win+/ is not available: another app holds it");
+
+        // A double-click on the strip folds the window, as the collapse button does (Windows only for now: SDL
+        // gives the app no click on a caption, and Windows has one on its hook).
+        if (window.TryReportCaptionDoubleClicks())
+            loop.OnCaptionDoubleClick = () => SetCollapsed(!collapsed);
 
         loop.Run();
 
@@ -392,22 +436,27 @@ internal static class Program
         window.SetPosition(placed.X, placed.Y);
     }
 
-    // Windows takes the window's icon from the exe's (ApplicationIcon), at every size it needs; X11 has
-    // only what the window is given.
-    private static void SetIconFromResource(SdlVulkanWindow window)
+    // A 64x64 window icon from the build's resources (tools/make-icon.py draws them). Windows takes the
+    // window's first icon from the exe's (ApplicationIcon), at every size it needs; X11 has only what the
+    // window is given.
+    private static RgbaImage? LoadIcon(string name)
     {
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("ytplayer-64.rgba");
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name);
         if (stream is null)
-            return;
+            return null;
         var icon = new RgbaImage(64, 64);
         stream.ReadExactly(icon.Pixels);
-        window.SetIcon(icon);
+        return icon;
     }
+
+    private static bool IsStartMinimised(string arg)
+        => arg.Equals("--start-minimised", StringComparison.OrdinalIgnoreCase)
+           || arg.Equals("--start-minimized", StringComparison.OrdinalIgnoreCase);
 
     private static PipLayout CurrentLayout(SdlVulkanWindow window, bool collapsed)
     {
         GetWindowSize(window.Handle, out var w, out var h);
-        return new PipLayout(w, h, collapsed);
+        return new PipLayout(w, h, collapsed, window.DisplayScale);
     }
 
     // The layout is in window points; the web view is placed in pixels.

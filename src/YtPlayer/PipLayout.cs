@@ -18,16 +18,23 @@ internal readonly record struct Box(int X, int Y, int W, int H)
 /// <see cref="Collapsed"/>, the window is the strip alone (<see cref="CollapsedHeight"/> tall): no web
 /// view, and nothing resizes, as there is nothing to resize to.
 /// </summary>
-internal readonly record struct PipLayout(int Width, int Height, bool Collapsed = false)
+/// <param name="Scale">The display's scale (1 at 96 dpi): window points are pixels on Windows and X11, so
+/// the strip's logical sizes are multiplied by it, or at 150% it would be two thirds the size it should.</param>
+internal readonly record struct PipLayout(int Width, int Height, bool Collapsed = false, float Scale = 1)
 {
-    public const int StripHeight = 28;
-    public const int Border = 4;
-    public const int ButtonWidth = 34;
+    public int StripHeight => Scaled(28);
+    public int Border => Scaled(4);
+    public int ButtonWidth => Scaled(34);
     /// <summary>How far from a corner, along either edge, a resize takes the corner.</summary>
-    public const int CornerGrip = 14;
+    public int CornerGrip => Scaled(14);
     /// <summary>The window's height while collapsed: the strip, and the border under it.</summary>
-    public const int CollapsedHeight = StripHeight + Border;
-    private const int TitlePadding = 6;
+    public int CollapsedHeight => StripHeight + Border;
+    private int TitlePadding => Scaled(6);
+
+    /// <summary>The window's height while collapsed, on a display of <paramref name="scale"/>.</summary>
+    public static int CollapsedHeightAt(float scale) => new PipLayout(0, 0, true, scale).CollapsedHeight;
+
+    private int Scaled(int logical) => (int)MathF.Round(logical * Scale);
 
     public Box WebView => Collapsed
         ? default

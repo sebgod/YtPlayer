@@ -39,6 +39,8 @@ internal sealed class PipChrome(VkRenderer renderer, string? font)
             return;
         // Window points to the renderer's pixels.
         var scale = renderer.Width / (float)layout.Width;
+        // Logical sizes (a mark, a line, the title's text) to the renderer's pixels: the display's scale too.
+        var ui = scale * layout.Scale;
 
         foreach (var button in PipLayout.Buttons)
         {
@@ -52,8 +54,8 @@ internal sealed class PipChrome(VkRenderer renderer, string? font)
 
             var cx = x0 + w / 2;
             var cy = y0 + h / 2;
-            var u = 5 * scale; // half the size of a mark
-            var t = Math.Max(1, (int)MathF.Round(1.5f * scale));
+            var u = 5 * ui; // half the size of a mark
+            var t = Math.Max(1, (int)MathF.Round(1.5f * ui));
             switch (button)
             {
                 case PipButton.Back:
@@ -101,15 +103,15 @@ internal sealed class PipChrome(VkRenderer renderer, string? font)
             }
         }
 
-        DrawTitle(layout.Title, state.Title, scale);
+        DrawTitle(layout.Title, state.Title, scale, ui);
     }
 
-    private void DrawTitle(Box box, string? title, float scale)
+    private void DrawTitle(Box box, string? title, float scale, float ui)
     {
         var width = box.W * scale;
-        if (font is null || string.IsNullOrWhiteSpace(title) || width < 24 * scale)
+        if (font is null || string.IsNullOrWhiteSpace(title) || width < 24 * ui)
             return;
-        var size = TitleSize * scale;
+        var size = TitleSize * ui;
         if (_fittedTitle.Title != title || _fittedTitle.Width != width)
             _fittedTitle = (title, width, Ellipsize(title, size, width));
         if (_fittedTitle.Fitted.Length == 0)

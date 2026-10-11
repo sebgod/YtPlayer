@@ -34,6 +34,12 @@ public class PageMessageTests
     public void PlayingSaysWhetherTheVideoPlays(string json, bool playing)
         => PageMessage.Parse(json).Playing.ShouldBe(playing);
 
+    [Fact]
+    public void HideAsksForTheWindowToHide() => PageMessage.Parse("""{"hide":true}""").Hide.ShouldBeTrue();
+
+    [Fact]
+    public void AnythingElseDoesNotHide() => PageMessage.Parse("""{"playing":true}""").Hide.ShouldBeFalse();
+
     [Theory]
     [InlineData("""{"ad":true}""", true)]
     [InlineData("""{"ad":false}""", false)]

@@ -4,12 +4,17 @@ The mark is the compact button's glyph grown into an app icon: a screen, with a 
 in its lower right that holds a play triangle, in the strip's own colours (PipChrome). Each size is drawn
 on its own (supersampled, then reduced), so a 16 px icon gets strokes thick enough to survive.
 
+While the video plays, the window's icon changes: the screen's outline goes red and the panel shows an
+equalizer's three bars, so the taskbar says something is playing even at 24 px.
+
     python tools/make-icon.py
 
 Writes, under src/YtPlayer/Assets/:
   ytplayer.ico       16-256 px, PNG-compressed entries; the Windows exe icon (ApplicationIcon)
   ytplayer-256.png   for the README and anything else that wants a picture
-  ytplayer-64.rgba   64x64 raw RGBA bytes, the window icon on Linux (SDL_SetWindowIcon)
+  ytplayer-64.rgba   64x64 raw RGBA bytes, the window icon on Linux (SDL_SetWindowIcon), and on
+                     Windows too once the video has played
+  ytplayer-playing-64.rgba   the same, while the video plays
 
 Needs Pillow.
 """
@@ -28,7 +33,7 @@ SUPERSAMPLE = 8
 OUT = Path(__file__).resolve().parent.parent / "src" / "YtPlayer" / "Assets"
 
 
-def draw(size: int) -> Image.Image:
+def draw(size: int, playing: bool = False) -> Image.Image:
     s = size * SUPERSAMPLE
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -42,18 +47,28 @@ def draw(size: int) -> Image.Image:
     margin = 0.02 if small else 0.04
 
     d.rounded_rectangle(box(margin, margin, 1 - margin, 1 - margin), radius=round(0.2 * s), fill=TILE)
-    # The screen.
-    d.rounded_rectangle(box(0.15, 0.22, 0.85, 0.78), radius=round(0.07 * s), outline=INK,
+    # The screen; red while playing.
+    d.rounded_rectangle(box(0.15, 0.22, 0.85, 0.78), radius=round(0.07 * s), outline=ACCENT if playing else INK,
                         width=max(1, round(stroke * s)))
     # The picture in it, lower right, and its play triangle.
     px0, py0, px1, py1 = (0.44, 0.45, 0.78, 0.71) if not small else (0.42, 0.43, 0.80, 0.73)
     d.rounded_rectangle(box(px0, py0, px1, py1), radius=round(0.045 * s), fill=ACCENT)
-    cx, cy = (px0 + px1) / 2 + 0.01, (py0 + py1) / 2
-    h = (py1 - py0) * 0.52
-    w = h * 0.87
-    d.polygon([(round((cx - w / 2) * s), round((cy - h / 2) * s)),
-               (round((cx + w / 2) * s), round(cy * s)),
-               (round((cx - w / 2) * s), round((cy + h / 2) * s))], fill=TILE)
+    if playing:
+        # Three bars of an equalizer in place of the triangle, standing on one baseline.
+        pw, ph = px1 - px0, py1 - py0
+        bar, gap = pw * 0.15, pw * 0.09
+        x = px0 + (pw - 3 * bar - 2 * gap) / 2
+        base = py1 - ph * 0.2
+        for height in (0.45, 0.62, 0.32):
+            d.rectangle(box(x, base - ph * height, x + bar, base), fill=TILE)
+            x += bar + gap
+    else:
+        cx, cy = (px0 + px1) / 2 + 0.01, (py0 + py1) / 2
+        h = (py1 - py0) * 0.52
+        w = h * 0.87
+        d.polygon([(round((cx - w / 2) * s), round((cy - h / 2) * s)),
+                   (round((cx + w / 2) * s), round(cy * s)),
+                   (round((cx - w / 2) * s), round((cy + h / 2) * s))], fill=TILE)
 
     return img.resize((size, size), Image.LANCZOS)
 
@@ -83,6 +98,7 @@ def main() -> None:
     write_ico(OUT / "ytplayer.ico", images)
     images[ICO_SIZES.index(256)].save(OUT / "ytplayer-256.png", optimize=True)
     (OUT / "ytplayer-64.rgba").write_bytes(images[ICO_SIZES.index(64)].tobytes())
+    (OUT / "ytplayer-playing-64.rgba").write_bytes(draw(64, playing=True).tobytes())
     print(f"wrote {', '.join(p.name for p in sorted(OUT.iterdir()))} to {OUT}")
 
 
