@@ -125,6 +125,17 @@ await evaluate(`window.__posted.length = 0; window.__host({ togglePlay: true })`
 s = await state();
 check('togglePlay again resumes it', s.video?.paused === false && s.posted.some(m => m.playing === true), { video: s.video, posted: s.posted });
 
+// And Ctrl+P plays and pauses from anywhere in the window, the search box included, instead of printing.
+await evaluate(`window.__posted.length = 0`);
+await press('p', 'KeyP', 80, 2); await sleep(500);
+s = await state();
+check('Ctrl+P pauses the player and says so', s.video?.paused === true && await evaluate(`document.getElementById('ytpip-toast')?.textContent === 'Paused'`), s.video);
+await press('f', 'KeyF', 70, 2); await sleep(800); // into the search box as a viewer gets there
+await press('p', 'KeyP', 80, 2); await sleep(800);
+s = await state();
+check('Ctrl+P in the search box resumes it', s.video?.paused === false && s.focusedSearch, { video: s.video, focusedSearch: s.focusedSearch });
+await press('Escape', 'Escape', 27); await sleep(500);
+
 // 3b. Ctrl+C with nothing selected copies the video's link; Ctrl+Shift+C, the link at the current time.
 const videoId = await evaluate(`new URLSearchParams(location.search).get('v')`);
 await evaluate(`window.getSelection().removeAllRanges(); window.__posted.length = 0`);

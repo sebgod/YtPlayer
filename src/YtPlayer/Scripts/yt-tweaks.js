@@ -259,6 +259,22 @@
   function isTextField(el) {
     return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
   }
+  // Ctrl+P plays or pauses, from anywhere in the window, the search box included (the browser would print).
+  // The host's play/pause button and the strip's Ctrl+P come here too, as {togglePlay}.
+  function togglePlay(notify) {
+    // The player's video, wherever it is (the hidden miniplayer too), not a hover preview's.
+    var v = document.querySelector('#movie_player video');
+    if (!v) return;
+    if (v.paused) v.play(); else v.pause();
+    if (notify) toast(v.paused ? 'Paused' : 'Playing');
+  }
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || (e.key !== 'p' && e.key !== 'P')) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    togglePlay(true);
+  }, true);
+
   document.addEventListener('paste', function (e) {
     if (isTextField(e.target) || isTextField(document.activeElement)) return;
     var text = e.clipboardData && e.clipboardData.getData('text/plain');
@@ -274,11 +290,8 @@
       if (d && typeof d.compact === 'boolean') setCompact(d.compact);
       if (d && d.search) startSearch();
       if (d && d.copyLink) copyLink(d.copyLink === 'time');
-      if (d && d.togglePlay) {
-        // The player's video, wherever it is (the hidden miniplayer too), not a hover preview's.
-        var v = document.querySelector('#movie_player video');
-        if (v) { if (v.paused) v.play(); else v.pause(); }
-      }
+      // From a key (the strip's Ctrl+P) it says what it did; from the strip's button, which shows it, not.
+      if (d && d.togglePlay) togglePlay(d.togglePlay === 'key');
     });
   } catch (e) { /* no host bridge */ }
   // Whether the player's video plays, for the strip's play/pause button. Media events do not bubble, but
