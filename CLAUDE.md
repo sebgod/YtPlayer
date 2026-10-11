@@ -9,7 +9,7 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   with `pixelWidth / layout.Width`. Draw and hit test both read `PipLayout`, so they cannot disagree.
 - `Scripts/yt-tweaks.js` runs at document start on every page (`INativeWebView.AddScriptAtDocumentStartAsync`):
   Shorts hiding, the Shorts redirect, compact mode, the hidden miniplayer, ad skipping, and the Ctrl+F,
-  Ctrl+C, Ctrl+Shift+C and Ctrl+V keys. Host and page talk through `chrome.webview` messages: `{ready}`,
+  Ctrl+C, Ctrl+Shift+C, Ctrl+P and Ctrl+V keys. Host and page talk through `chrome.webview` messages: `{ready}`,
   `{showing}`, `{paste}`, `{copy}`, `{skipAt}`, `{playing}` from the page (read by `PageMessage`), `{compact}`,
   `{search}`, `{copyLink}`, `{togglePlay}` from the host.
 - `tools/page-check.mjs` drives that script in a headless Edge against live YouTube (search, compact,

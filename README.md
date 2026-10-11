@@ -48,6 +48,7 @@ and remembers each size, as you last left it, between runs; so are its position 
 | **Ctrl+V** | opens a YouTube link from the clipboard: a video, Short, playlist or channel; `youtu.be/…` without `https://` too |
 | **Ctrl+C** | with nothing selected, copies the video's link (`https://youtu.be/…`); with a selection, a normal copy |
 | **Ctrl+Shift+C** | copies the video's link at the current time (`…?t=83`) |
+| **Ctrl+P** | play/pause, from anywhere in the window, the search box included |
 | media keys, headset button | play/pause, as with YouTube in a browser |
 
 ## Signing in, and what is hidden

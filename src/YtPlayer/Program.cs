@@ -214,6 +214,9 @@ internal static class Program
                     case (InputModifier.Ctrl | InputModifier.Shift, InputKey.C):
                         web.PostMessage("""{"copyLink":"time"}""");
                         return true;
+                    case (InputModifier.Ctrl, InputKey.P):
+                        web.PostMessage("""{"togglePlay":"key"}""");
+                        return true;
                     default:
                         return false;
                 }
