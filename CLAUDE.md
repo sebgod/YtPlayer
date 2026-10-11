@@ -12,6 +12,8 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   Ctrl+C, Ctrl+Shift+C, Ctrl+P and Ctrl+V keys. Host and page talk through `chrome.webview` messages: `{ready}`,
   `{showing}`, `{paste}`, `{copy}`, `{skipAt}`, `{playing}` from the page (read by `PageMessage`), `{compact}`,
   `{search}`, `{copyLink}`, `{togglePlay}` from the host.
+- Win+/ is a global hotkey (`SdlVulkanWindow.TryRegisterGlobalHotKey`, Windows only): it raises the window and
+  sends the page `{search}`, as Ctrl+F does.
 - `tools/page-check.mjs` drives that script in a headless Edge against live YouTube (search, compact,
   the keys, paste, miniplayer, and when YouTube serves one, a real ad's Skip clicked as the host clicks it) with a stub for the host. Run it after touching the script; YouTube's markup
   moves under it.

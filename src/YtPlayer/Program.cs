@@ -282,6 +282,23 @@ internal static class Program
                 loop.RequestRedraw();
         };
 
+        // Win+/ from whichever app is active: the player comes forward, unfolded, with YouTube's search box
+        // open. The press is what lets a window in the background take the foreground. Windows only for now.
+        const int SearchHotKey = 1;
+        if (window.TryRegisterGlobalHotKey(SearchHotKey, Keymod.GUI, Keycode.Slash))
+            loop.OnGlobalHotKey = id =>
+            {
+                if (id != SearchHotKey)
+                    return;
+                SetCollapsed(false);
+                window.Raise();
+                web.Focus();
+                web.PostMessage("""{"search":true}""");
+                loop.RequestRedraw();
+            };
+        else if (OperatingSystem.IsWindows())
+            PlayerLog.Write("Win+/ is not available: another app holds it");
+
         loop.Run();
 
         window.GetPosition(out var px, out var py);

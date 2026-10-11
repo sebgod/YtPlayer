@@ -44,6 +44,7 @@ and remembers each size, as you last left it, between runs; so are its position 
 
 | Key | |
 | --- | --- |
+| **Win+/** | from any app: the player comes forward (unfolded if collapsed) with YouTube's search box open. Windows only |
 | **Ctrl+F** | YouTube's search box (on a compact video, compact steps aside until you pick a result or press Esc) |
 | **Ctrl+V** | opens a YouTube link from the clipboard: a video, Short, playlist or channel; `youtu.be/…` without `https://` too |
 | **Ctrl+C** | with nothing selected, copies the video's link (`https://youtu.be/…`); with a selection, a normal copy |
