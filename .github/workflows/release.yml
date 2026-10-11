@@ -79,6 +79,7 @@ jobs:
           }
           $name = "ytplayer-$env:VERSION-${{ matrix.rid }}"
           New-Item -ItemType Directory dist | Out-Null
+          Copy-Item LICENSE publish/
           Compress-Archive -Path (Get-ChildItem publish -Exclude *.pdb).FullName -DestinationPath "dist/$name.zip"
           Compress-Archive -Path (Get-ChildItem publish -Filter *.pdb).FullName -DestinationPath "dist/$name-symbols.zip"
           Get-ChildItem publish, dist | Format-Table Name, Length
