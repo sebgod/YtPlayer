@@ -7,9 +7,10 @@
     <!-- 7.57 brought INativeWebView.AddScriptAtDocumentStartAsync and
          NativeWebViewOptions.UserDataFolder (SharpAstro/SdlVulkan.Renderer#120); 7.58 brings
          SdlVulkanWindow.IsActive, SetMaximizable, SetMinimumSize and TryGetUsableDisplayBounds; 7.62,
-         global hotkeys (TryRegisterGlobalHotKey, SdlEventLoop.OnGlobalHotKey). -->
-    <PackageVersion Include="SdlVulkan.Renderer" Version="7.62.*" />
-    <PackageVersion Include="SdlVulkan.Renderer.WebView" Version="7.62.*" />
+         global hotkeys (TryRegisterGlobalHotKey, SdlEventLoop.OnGlobalHotKey); 7.63, Hide/Show, a window
+         created hidden, and caption double-clicks (TryReportCaptionDoubleClicks). -->
+    <PackageVersion Include="SdlVulkan.Renderer" Version="7.63.*" />
+    <PackageVersion Include="SdlVulkan.Renderer.WebView" Version="7.63.*" />
     <PackageVersion Include="SDL3-CS" Version="3.5.0-preview.20260213-150035" />
     <PackageVersion Include="SDL3-CS.Native" Version="3.5.0-preview.20260205-174353" />
     <PackageVersion Include="xunit.v3" Version="4.0.1" />

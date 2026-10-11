@@ -136,6 +136,12 @@ s = await state();
 check('Ctrl+P in the search box resumes it', s.video?.paused === false && s.focusedSearch, { video: s.video, focusedSearch: s.focusedSearch });
 await press('Escape', 'Escape', 27); await sleep(500);
 
+// Ctrl+H asks the host to hide the window (the host hides it; Win+/ brings it back).
+await evaluate(`window.__posted.length = 0`);
+await press('h', 'KeyH', 72, 2); await sleep(300);
+s = await state();
+check('Ctrl+H asks the host to hide the window', s.posted.some(m => m.hide === true), s.posted);
+
 // 3b. Ctrl+C with nothing selected copies the video's link; Ctrl+Shift+C, the link at the current time.
 const videoId = await evaluate(`new URLSearchParams(location.search).get('v')`);
 await evaluate(`window.getSelection().removeAllRanges(); window.__posted.length = 0`);

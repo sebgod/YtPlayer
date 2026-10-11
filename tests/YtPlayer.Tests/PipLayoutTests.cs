@@ -43,7 +43,7 @@ public class PipLayoutTests
     public void TheTitleSitsBetweenTheButtons()
         => Layout.Title.ShouldBe(new Box(74, 0, 264, 28)); // 68 + 6 to 344 - 6
 
-    private static readonly PipLayout Collapsed = new(480, PipLayout.CollapsedHeight, Collapsed: true);
+    private static readonly PipLayout Collapsed = new(480, PipLayout.CollapsedHeightAt(1), Collapsed: true);
 
     [Fact]
     public void CollapsedThereIsNoWebView() => Collapsed.WebView.ShouldBe(default);
@@ -56,6 +56,29 @@ public class PipLayoutTests
     [InlineData(465, 2, HitTestResult.Normal)] // the close button, right up to the top edge
     public void CollapsedTheStripDragsAndNothingResizes(float x, float y, HitTestResult expected)
         => Collapsed.HitTest(x, y).ShouldBe(expected);
+
+    // At 150% (144 dpi) every logical size is half again as big: the strip 42 points tall, a button 51 wide.
+    private static readonly PipLayout Scaled = new(720, 450, Scale: 1.5f);
+
+    [Fact]
+    public void ScaledTheStripAndBorderGrowWithTheDisplay()
+    {
+        Scaled.WebView.ShouldBe(new Box(6, 42, 708, 402));
+        Scaled.ButtonBox(PipButton.Close).ShouldBe(new Box(669, 0, 51, 42));
+        Scaled.Title.ShouldBe(new Box(111, 0, 396, 42)); // 102 + 9 to 516 - 9
+        PipLayout.CollapsedHeightAt(1.5f).ShouldBe(48);
+    }
+
+    [Theory]
+    [InlineData(5, 200, HitTestResult.ResizeLeft)] // 4 points in would be the page at 100%
+    [InlineData(360, 40, HitTestResult.Draggable)] // below a 28-point strip
+    [InlineData(700, 40, HitTestResult.Normal)] // the close button
+    public void ScaledTheHitTestUsesTheScaledSizes(float x, float y, HitTestResult expected)
+        => Scaled.HitTest(x, y).ShouldBe(expected);
+
+    [Fact]
+    public void ScaledEachButtonIsWhereItIsDrawn()
+        => Scaled.ButtonAt(700, 40).ShouldBe(PipButton.Close);
 
     [Fact]
     public void AButtonIsNotADragHandle()

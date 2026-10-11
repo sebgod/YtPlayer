@@ -275,6 +275,14 @@
     togglePlay(true);
   }, true);
 
+  // Ctrl+H hides the window (the host does it; Win+/ brings it back), from anywhere in it, as Ctrl+P plays.
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || (e.key !== 'h' && e.key !== 'H')) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    post({ hide: true });
+  }, true);
+
   document.addEventListener('paste', function (e) {
     if (isTextField(e.target) || isTextField(document.activeElement)) return;
     var text = e.clipboardData && e.clipboardData.getData('text/plain');
