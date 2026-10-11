@@ -94,4 +94,6 @@ Android, so building it needs `dotnet workload install android`.
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE). Each release zip also has `THIRD-PARTY-NOTICES.txt`, the licenses of what is built into the
+exe or ships beside it (the .NET runtime, SDL, Microsoft's WebView2 loader, and the libraries), written for
+that build by [`tools/third-party-notices.py`](tools/third-party-notices.py).

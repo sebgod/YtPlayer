@@ -69,12 +69,15 @@ jobs:
           dotnet-version: 10.0.x
       - name: Publish (native AOT)
         run: dotnet publish src/YtPlayer -f net10.0-windows -r ${{ matrix.rid }} -c Release -p:Version=${{ env.VERSION }} -o publish
+      # From the packages this publish restored for the RID, so it names what is in this build.
+      - name: Third-party notices
+        run: python tools/third-party-notices.py ${{ matrix.rid }} publish/THIRD-PARTY-NOTICES.txt
       # The exe alone cannot start: SDL3.dll is the window, and WebView2Loader.dll the page (without it
       # the window opens on a web view that fails at attach). A zip that lost either would look fine.
       - name: Zip
         shell: pwsh
         run: |
-          foreach ($file in 'ytplayer.exe', 'SDL3.dll', 'WebView2Loader.dll') {
+          foreach ($file in 'ytplayer.exe', 'SDL3.dll', 'WebView2Loader.dll', 'THIRD-PARTY-NOTICES.txt') {
             if (-not (Test-Path "publish/$file")) { throw "the publish has no $file" }
           }
           $name = "ytplayer-$env:VERSION-${{ matrix.rid }}"
