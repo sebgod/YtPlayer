@@ -16,6 +16,9 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
 - Win+/ is a global hotkey (`SdlVulkanWindow.TryRegisterGlobalHotKey`, Windows only): it shows the window if
   hidden, raises it and gives it the keyboard. Ctrl+H and `--start-minimised` hide it (`SdlVulkanWindow.Hide`,
   off the taskbar too), but only while Win+/ is ours to bring it back; otherwise they minimize it.
+- One player: `InstanceGate` (SharpAstro.AppShell, which comes with SdlVulkan.Renderer) is claimed at start; a
+  later launch hands its arguments to the running player and exits before it has a window (`--start-minimised`
+  just exits). The hand-off is drained in `OnLoopIteration`, which runs while the window is hidden too.
 - A double-click on the strip folds the window, as the collapse button does. SDL gives the app no click on a
   draggable area, so it comes from `SdlVulkanWindow.TryReportCaptionDoubleClicks` (Windows only).
 - `tools/page-check.mjs` drives that script in a headless Edge against live YouTube (search, compact,

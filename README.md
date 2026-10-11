@@ -14,6 +14,9 @@ ytplayer lofi beats                         # a search
 ytplayer --start-minimised                  # out of sight until Win+/ (for a login item)
 ```
 
+There is one player: run it again, from the Start menu, a shortcut or the command line, and the running one comes
+forward, with the video or search it was given. `--start-minimised` leaves a running one as it is.
+
 ## Download
 
 Windows builds are on the [releases page](https://github.com/sebgod/YtPlayer/releases): `win-x64` for most
@@ -22,7 +25,7 @@ no .NET needed. It needs the Edge WebView2 Runtime, which Windows 10 and 11 alre
 driver. The exe is not signed, so SmartScreen may ask before the first run ("More info", then "Run anyway").
 
 To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` in the Startup folder
-(Win+R, `shell:startup`): it starts out of sight, and Win+/ brings it up.
+(Win+R, `shell:startup`): it starts out of sight, and Win+/ brings it up, as does starting it again from the Start menu.
 
 ## The window
 

@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using DIR.Lib;
 using SdlVulkan.Renderer;
 using SdlVulkan.Renderer.WebView;
+using SharpAstro.AppShell;
 using static SDL3.SDL;
 
 namespace YtPlayer;
@@ -14,7 +15,8 @@ namespace YtPlayer;
 /// in the platform's web view (WebView2 on Windows, WebKitGTK on Linux) under a thin strip that drags
 /// the window and holds four buttons: back, compact (the video alone), stay on top, close.
 /// </summary>
-/// <remarks>Usage: <c>ytplayer [--start-minimised] [video URL | video id | search words]</c>.</remarks>
+/// <remarks>Usage: <c>ytplayer [--start-minimised] [video URL | video id | search words]</c>. With a player already
+/// running, it gets the video or search instead, and comes forward.</remarks>
 internal static class Program
 {
     private static readonly ConcurrentQueue<Action> UiQueue = new();
@@ -30,6 +32,13 @@ internal static class Program
         var startHidden = args.Any(IsStartMinimised);
         args = [.. args.Where(a => !IsStartMinimised(a))];
         var input = args.Length > 0 ? string.Join(' ', args) : null;
+        // One player: a later launch hands what it was given (a video, a search, or nothing) to the running one,
+        // which comes forward with it, and exits before it has a window. --start-minimised (a login item) finds one
+        // already running and leaves it as it is. A hand-off that fails opens a window here instead.
+        var channel = InstanceGate.ChannelFor("ytplayer");
+        using var gate = InstanceGate.TryClaim(channel);
+        if (gate is null && (startHidden || InstanceGate.TryHandOff(channel, input ?? "", TimeSpan.FromSeconds(2))))
+            return 0;
         var startUrl = YouTubeUrl.ToStartUrl(input);
         // A video asked for on the command line opens compact; otherwise the last mode is kept.
         var compact = YouTubeUrl.TryGetVideoId(input ?? "", out _, out _) || (input is null && settings.Compact);
@@ -295,6 +304,32 @@ internal static class Program
                 return true;
             },
         };
+        // Win+/, or a later launch: the player comes forward, hidden, minimized or behind others, with the keyboard
+        // (the page's, unless it is folded to its strip). Activate (AppShell's) restores only a minimized window.
+        void Summon()
+        {
+            if (window.IsHidden)
+                window.Show();
+            window.Activate();
+            if (!collapsed)
+                web.Focus();
+            loop.RequestRedraw();
+        }
+
+        // A later launch's video or search opens here, as it would have there: a video compact, and the window
+        // unfolded to show it. Given nothing, the player only comes forward.
+        void OpenHandedOff(string handed)
+        {
+            if (!string.IsNullOrWhiteSpace(handed))
+            {
+                if (YouTubeUrl.TryGetVideoId(handed, out _, out _))
+                    compact = true;
+                SetCollapsed(false);
+                web.Navigate(YouTubeUrl.ToStartUrl(handed));
+            }
+            Summon();
+        }
+
         // The strip and border light up while the window is the active one, so it is plain when keys go
         // to it. Nothing signals a change, so it is read every iteration (at least every 16 ms).
         var active = false;
@@ -304,6 +339,13 @@ internal static class Program
             while (UiQueue.TryDequeue(out var action))
             {
                 action();
+                any = true;
+            }
+            // A later launch's hand-off, queued by the gate's own thread. Read here, as this runs while the window
+            // is hidden or minimized too, when nothing renders.
+            while (gate is not null && gate.TryDequeue(out var handoff))
+            {
+                OpenHandedOff(handoff.Payload);
                 any = true;
             }
             if (window.IsActive != active)
@@ -320,22 +362,12 @@ internal static class Program
                 loop.RequestRedraw();
         };
 
-        // Win+/ from whichever app is active: the player comes forward, hidden, minimized or behind others, with
-        // the keyboard (the page's, unless it is folded to its strip). The press is what lets a window in the
-        // background take the foreground.
+        // Win+/ from whichever app is active. The press is what lets a window in the background take the foreground.
         if (summonable)
             loop.OnGlobalHotKey = id =>
             {
-                if (id != SummonHotKey)
-                    return;
-                if (window.IsHidden)
-                    window.Show();
-                if (window.IsMinimized)
-                    window.Restore();
-                window.Raise();
-                if (!collapsed)
-                    web.Focus();
-                loop.RequestRedraw();
+                if (id == SummonHotKey)
+                    Summon();
             };
 
         // A double-click on the strip folds the window, as the collapse button does (Windows only for now: SDL
