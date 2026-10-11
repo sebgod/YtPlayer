@@ -91,3 +91,7 @@ build tools for that architecture).
 With a checkout of SdlVulkan.Renderer next to this one (`../SdlVulkan.Renderer`), the build uses it instead
 of the NuGet package (`-p:UseLocalSiblings=false` to opt out). That checkout's core project also targets
 Android, so building it needs `dotnet workload install android`.
+
+## License
+
+[MIT](LICENSE).
