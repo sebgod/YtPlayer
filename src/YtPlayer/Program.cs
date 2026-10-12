@@ -68,6 +68,8 @@ internal static class Program
         Fit(window, new Box(startX, startY, startSize.Item1, startSize.Item2), startSize, showing);
         // The strip is a caption to Windows (the hit test says so), and a double-click on a caption
         // maximizes: a picture-in-picture window has no use for that. The double-click folds it instead.
+        // The choice holds when SDL rebuilds the style (a restore from minimized; 7.67): before, Win+D and back
+        // gave the box back, and a double-click then maximized the window and folded it at once.
         window.SetMaximizable(false);
         // Win+/ from whichever app is active brings the player forward (Windows only for now). Without it a
         // hidden window could not come back, so then Ctrl+H and --start-minimised only minimize it.
@@ -206,16 +208,14 @@ internal static class Program
 
         // YouTube's fullscreen (F, its button, a double-click on the video) would fill only the web view, which is
         // the small window: while it lasts the window fills its display, with no strip or border, and leaving it
-        // (Esc, F) puts the window back where and as big as it was. SDL rebuilds the window's style on the way
-        // out, which gives back the maximize box a caption double-click would use, so it is taken away again.
+        // (Esc, F) puts the window back where and as big as it was. (SDL rebuilds the window's style on the way
+        // out, maximize box included; SdlVulkan.Renderer 7.67 takes the box away again, as SetMaximizable asked.)
         void SetFullscreen(bool on)
         {
             if (on == fullscreen || collapsed)
                 return;
             fullscreen = on;
             SetWindowFullscreen(window.Handle, on);
-            if (!on)
-                window.SetMaximizable(false);
             _layout = CurrentLayout(window, collapsed, fullscreen);
             web.SetBounds(WebViewPixels(_layout, window));
             if (!on && showingAfterFullscreen is { } pending)
