@@ -242,6 +242,43 @@ const after = await evaluate(`new URLSearchParams(location.search).get('v')`);
 s = await state();
 check('next: another video plays', !!after && after !== before && s.video && !s.video.paused, { before, after, video: s.video });
 
+// 9. The queue, YouTube's own: the host's {queue} (the clipboard's link, from Ctrl+Q) adds a video, Ctrl+L lists the
+// queue, Escape closes the list, and a click on an entry plays it. With compact off, Ctrl+Q over a related video's
+// thumbnail queues that one, and over no video asks the host for the clipboard's.
+const queueIds = `JSON.stringify(((document.querySelector('yt-playlist-manager')?.getPlaylistData?.() || {}).contents || []).map(c => c.playlistPanelVideoRenderer?.videoId))`;
+await evaluate(`window.__host({ queue: 'jNQXAC9IVRw' })`); await sleep(3500);
+let ids = JSON.parse(await evaluate(queueIds));
+check('queue: the host\'s {queue} adds the video', ids.includes('jNQXAC9IVRw'), ids);
+check('queue: the notice says so', /^Queued: /.test(await evaluate(`document.getElementById('ytpip-toast')?.textContent || ''`)), await evaluate(`document.getElementById('ytpip-toast')?.textContent`));
+await press('l', 'KeyL', 76, 2); await sleep(400);
+const listed = await evaluate(`JSON.stringify([...document.querySelectorAll('#ytpip-queue .ytpip-q')].map(b => b.textContent))`);
+check('queue: Ctrl+L lists it', JSON.parse(listed ?? '[]').length === ids.length && ids.length > 0, listed);
+await press('Escape', 'Escape', 27); await sleep(300);
+check('queue: Escape closes the list', !(await evaluate(`!!document.getElementById('ytpip-queue')`)));
+await press('l', 'KeyL', 76, 2); await sleep(400);
+await evaluate(`[...document.querySelectorAll('#ytpip-queue .ytpip-q')].find(b => /zoo/i.test(b.textContent))?.click()`); await sleep(5000);
+check('queue: a click on an entry plays it', await evaluate(`new URLSearchParams(location.search).get('v')`) === 'jNQXAC9IVRw', await evaluate('location.search'));
+await evaluate(`window.__host({ compact: false })`); await sleep(3000);
+const tile = JSON.parse(await evaluate(`(() => {
+  const t = [...document.querySelectorAll('yt-lockup-view-model, ytd-compact-video-renderer')].find(e => e.querySelector('a[href*="watch?v="]') && e.getBoundingClientRect().height > 20);
+  if (!t) return 'null';
+  t.scrollIntoView({ block: 'center' });
+  const b = t.getBoundingClientRect(), m = /[?&]v=([A-Za-z0-9_-]{11})/.exec(t.querySelector('a[href*="watch?v="]').getAttribute('href'));
+  return m ? JSON.stringify({ x: b.x + b.width / 2, y: b.y + b.height / 2, id: m[1] }) : 'null';
+})()`) ?? 'null');
+if (tile) {
+  await sleep(500);
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: tile.x, y: tile.y });
+  await press('q', 'KeyQ', 81, 2); await sleep(3500);
+  ids = JSON.parse(await evaluate(queueIds));
+  check('queue: Ctrl+Q over a thumbnail queues that video', ids.includes(tile.id), { tile: tile.id, ids });
+} else check('queue: a related video to point at', false);
+await evaluate(`window.__posted.length = 0`);
+await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 3, y: 3 });
+await press('q', 'KeyQ', 81, 2); await sleep(300);
+s = await state();
+check('queue: Ctrl+Q over no video asks the host for the clipboard\'s', s.posted.some(m => m.queueClipboard === true), s.posted);
+
 ws.close(); proc.kill();
 console.log(failures ? `${failures} FAILED` : 'ALL PASSED');
 process.exit(failures ? 1 : 0);

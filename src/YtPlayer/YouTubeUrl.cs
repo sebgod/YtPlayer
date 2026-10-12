@@ -43,6 +43,11 @@ internal static partial class YouTubeUrl
         return TryGetVideoId(link, out var id, out var start) ? WatchUrl(id, start) : uri.AbsoluteUri;
     }
 
+    /// <summary>The video a link on the clipboard is to, for the queue (Ctrl+Q): a link the way
+    /// <see cref="FromPastedLink"/> takes one, to a video. Null for anything else.</summary>
+    public static string? VideoIdFromPastedLink(string? text)
+        => FromPastedLink(text) is { } link && TryGetVideoId(link, out var id, out _) ? id : null;
+
     public static string WatchUrl(string id, string? start = null)
         => start is null ? $"{Home}watch?v={id}" : $"{Home}watch?v={id}&t={Uri.EscapeDataString(start)}";
 

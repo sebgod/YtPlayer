@@ -185,6 +185,8 @@ internal static class Program
                 Hide();
             if (message.Collapse is { } fold)
                 SetCollapsed(fold);
+            if (message.QueueClipboard)
+                QueueFromClipboard(web);
         });
         web.TitleChanged += title => UiQueue.Enqueue(() =>
         {
@@ -318,6 +320,16 @@ internal static class Program
                         return true;
                     case (InputModifier.Ctrl, InputKey.Down):
                         SetCollapsed(false);
+                        return true;
+                    // The queue: the strip has no pointer over a video, so Ctrl+Q queues the clipboard's link; Ctrl+L
+                    // unfolds the window to show the list, which is the page's.
+                    case (InputModifier.Ctrl, InputKey.Q):
+                        QueueFromClipboard(web);
+                        return true;
+                    case (InputModifier.Ctrl, InputKey.L):
+                        SetCollapsed(false);
+                        web.Focus();
+                        web.PostMessage("""{"listQueue":true}""");
                         return true;
                     // YouTube's own key for the next video, which the page takes itself; the strip passes it on.
                     case (InputModifier.Shift, InputKey.N):
@@ -479,6 +491,14 @@ internal static class Program
                     $"{{\"type\":\"mouseReleased\",{at},\"button\":\"left\",\"clickCount\":1}}"))
             .ContinueWith(t => PlayerLog.Write($"ad: the Skip click failed: {t.Exception?.GetBaseException().Message}"),
                 CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+    }
+
+    // Ctrl+Q with no video under the pointer: the video whose link is on the clipboard goes to the page's queue
+    // (null tells the page there was none). A link the way Ctrl+V takes one, a bare id not.
+    private static void QueueFromClipboard(INativeWebView web)
+    {
+        var id = YouTubeUrl.VideoIdFromPastedLink(GetClipboardText());
+        web.PostMessage(id is null ? """{"queue":null}""" : $$"""{"queue":"{{id}}"}""");
     }
 
     // Ctrl+V outside a text field: a YouTube link opens; anything else on the clipboard is left alone.

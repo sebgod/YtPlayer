@@ -10,9 +10,13 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   are logical, times `Scale` (the display's): window points are pixels on Windows and X11.
 - `Scripts/yt-tweaks.js` runs at document start on every page (`INativeWebView.AddScriptAtDocumentStartAsync`):
   Shorts hiding, the Shorts redirect, compact mode, the hidden miniplayer, ad skipping, and the Ctrl+F,
-  Ctrl+C, Ctrl+Shift+C, Ctrl+P, Ctrl+H, Ctrl+Up/Down and Ctrl+V keys. Host and page talk through `chrome.webview`
-  messages: `{ready}`, `{showing}`, `{paste}`, `{copy}`, `{skipAt}`, `{playing}`, `{hide}`, `{collapse}` from the
-  page (read by `PageMessage`), `{compact}`, `{search}`, `{copyLink}`, `{togglePlay}`, `{next}` from the host.
+  Ctrl+C, Ctrl+Shift+C, Ctrl+P, Ctrl+H, Ctrl+Up/Down, Ctrl+Q, Ctrl+L and Ctrl+V keys. Host and page talk through
+  `chrome.webview` messages: `{ready}`, `{showing}`, `{paste}`, `{copy}`, `{skipAt}`, `{playing}`, `{hide}`,
+  `{collapse}`, `{queueClipboard}` from the page (read by `PageMessage`), `{compact}`, `{search}`, `{copyLink}`,
+  `{togglePlay}`, `{next}`, `{queue}`, `{listQueue}` from the host.
+- The queue is YouTube's own: the script adds with the `addToPlaylistCommand` its "Add to queue" sends, run through
+  `ytd-app.resolveCommand`, and reads `yt-playlist-manager.getPlaylistData()`. Both are YouTube internals; the
+  page check covers them.
 - Win+/ is a global hotkey (`SdlVulkanWindow.TryRegisterGlobalHotKey`, Windows only): it shows the window if
   hidden, raises it and gives it the keyboard. Ctrl+H and `--start-minimised` hide it (`SdlVulkanWindow.Hide`,
   off the taskbar too), but only while Win+/ is ours to bring it back; otherwise they minimize it.

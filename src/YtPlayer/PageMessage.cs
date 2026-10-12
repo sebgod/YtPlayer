@@ -9,10 +9,11 @@ namespace YtPlayer;
 /// <c>skipAt</c> (where an ad's Skip button is, in the page's CSS pixels, for the host to click),
 /// <c>playing</c> (whether the player's video plays, for the strip's play/pause button), <c>ad</c> (an ad
 /// started or ended, for the log), <c>hide</c> (Ctrl+H: hide the window), <c>collapse</c> (Ctrl+Up folds the
-/// window to its strip, Ctrl+Down unfolds it).</summary>
+/// window to its strip, Ctrl+Down unfolds it), <c>queueClipboard</c> (Ctrl+Q with no video under the pointer:
+/// queue the one whose link is on the clipboard).</summary>
 internal readonly record struct PageMessage(
     bool Ready, bool? Showing, string? Paste, string? Copy = null, (double X, double Y)? SkipAt = null,
-    bool? Playing = null, bool? Ad = null, bool Hide = false, bool? Collapse = null)
+    bool? Playing = null, bool? Ad = null, bool Hide = false, bool? Collapse = null, bool QueueClipboard = false)
 {
     /// <summary>Reads <paramref name="json"/>; anything that is not one of ours reads as empty.</summary>
     public static PageMessage Parse(string json)
@@ -44,7 +45,8 @@ internal readonly record struct PageMessage(
                 Hide: root.TryGetProperty("hide", out var h) && h.ValueKind == JsonValueKind.True,
                 Collapse: root.TryGetProperty("collapse", out var fold) && fold.ValueKind is JsonValueKind.True or JsonValueKind.False
                     ? fold.GetBoolean()
-                    : null);
+                    : null,
+                QueueClipboard: root.TryGetProperty("queueClipboard", out var q) && q.ValueKind == JsonValueKind.True);
         }
         catch (JsonException)
         {

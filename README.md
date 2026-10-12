@@ -47,6 +47,10 @@ To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` 
 
 The taskbar icon turns red, with an equalizer in its little picture, while the video plays.
 
+The **queue** is YouTube's own, the one its "Add to queue" fills, so the next button and autoplay follow it. Like
+YouTube's, it lasts while the page does: opening a link with Ctrl+V or from the command line starts a new page
+without it.
+
 YouTube's **fullscreen** (F, its button, a double-click on the video) fills the screen, not just the window
 (Windows); Esc or F again puts the window back where it was.
 
@@ -68,6 +72,8 @@ and remembers each size, as you last left it, between runs; so are its position 
 | **Ctrl+P** | play/pause, from anywhere in the window, the search box included |
 | **Ctrl+Up** / **Ctrl+Down** | fold the window to its strip / unfold it |
 | **Shift+N** | the next video (YouTube's own key; on the folded strip too) |
+| **Ctrl+Q** | queues the video under the pointer (a thumbnail), or else the one whose link is on the clipboard |
+| **Ctrl+L** | lists the queue (or the mix or playlist that plays); click an entry to play it, Esc closes the list |
 | **F** | YouTube's fullscreen, which fills the screen; Esc or F again leaves it |
 | media keys, headset button | play/pause, as with YouTube in a browser |
 
