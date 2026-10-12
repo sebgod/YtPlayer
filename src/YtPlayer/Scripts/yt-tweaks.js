@@ -48,7 +48,16 @@
     ' z-index: 2147483647; padding: 8px 14px; border-radius: 8px; background: rgba(24, 24, 28, 0.92);' +
     ' color: #fff; font: 500 14px/1.2 Roboto, Arial, sans-serif; opacity: 0; transition: opacity 0.2s;' +
     ' pointer-events: none; }\n' +
-    '#ytpip-toast.ytpip-toast-on { opacity: 1; }\n';
+    '#ytpip-toast.ytpip-toast-on { opacity: 1; }\n' +
+    // The queue's list (Ctrl+L), over everything, compact included.
+    '#ytpip-queue { position: fixed; left: 8px; right: 8px; top: 8px; max-height: calc(100vh - 16px); overflow: auto;' +
+    ' z-index: 2147483647; padding: 6px 0; border-radius: 8px; background: rgba(24, 24, 28, 0.96); color: #ddd;' +
+    ' font: 400 13px/1.3 Roboto, Arial, sans-serif; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5); }\n' +
+    '#ytpip-queue h2 { margin: 2px 12px 6px; font: 500 13px/1.3 Roboto, Arial, sans-serif; color: #fff; }\n' +
+    '#ytpip-queue .ytpip-q { display: block; width: 100%; padding: 4px 12px; border: 0; background: none; color: inherit;' +
+    ' font: inherit; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
+    '#ytpip-queue .ytpip-q:hover { background: rgba(255, 255, 255, 0.1); }\n' +
+    '#ytpip-queue .ytpip-q-now { color: #ff3030; }\n';
 
   function addStyle() {
     var style = document.createElement('style');
@@ -298,6 +307,119 @@
     } catch (e) { /* not YouTube's player API after all */ }
   }
 
+  // The queue is YouTube's own, the one its "Add to queue" fills, kept by its playlist manager while the page
+  // lasts (a full reload drops it). Ctrl+Q adds the video under the pointer (a thumbnail in a list), or with
+  // none there the one whose link is on the clipboard: the host reads it and sends it back as {queue}.
+  // Ctrl+L lists the queue (or the mix or playlist that plays), and a click on an entry plays it.
+  var pointer = null;
+  document.addEventListener('mousemove', function (e) { pointer = { x: e.clientX, y: e.clientY }; }, true);
+  var VIDEO_TILE = 'ytd-video-renderer, ytd-rich-item-renderer, ytd-compact-video-renderer, ytd-grid-video-renderer,' +
+    ' yt-lockup-view-model, ytd-playlist-panel-video-renderer, ytd-playlist-video-renderer, ytd-reel-item-renderer';
+  function videoUnderPointer() {
+    var el = pointer && document.elementFromPoint(pointer.x, pointer.y);
+    var tile = el && el.closest && el.closest(VIDEO_TILE);
+    var link = tile && tile.querySelector('a[href*="watch?v="], a[href*="/shorts/"]');
+    var m = link && /[?&]v=([\w-]{11})|\/shorts\/([\w-]{11})/.exec(link.getAttribute('href') || '');
+    if (!m) return null;
+    var title = tile.querySelector('#video-title, a[title], h3');
+    return { id: m[1] || m[2], title: title ? (title.getAttribute('title') || title.textContent || '').trim() : '' };
+  }
+  function playlistData() {
+    var manager = document.querySelector('yt-playlist-manager');
+    try {
+      return manager && manager.getPlaylistData ? manager.getPlaylistData() : null;
+    } catch (e) { return null; /* not YouTube's playlist manager after all */ }
+  }
+  function playlistEntries(data) {
+    return ((data && data.contents) || []).map(function (c) { return c.playlistPanelVideoRenderer; }).filter(Boolean);
+  }
+  function textOf(t) {
+    return typeof t === 'string' ? t : t ? t.simpleText || (t.runs || []).map(function (r) { return r.text; }).join('') : '';
+  }
+  // The command YouTube's own "Add to queue" sends, built from the id alone.
+  function queueVideo(id, title) {
+    var app = document.querySelector('ytd-app');
+    if (!app || !app.resolveCommand) { toast('Cannot queue on this page'); return; }
+    try {
+      app.resolveCommand({ signalServiceEndpoint: { signal: 'CLIENT_SIGNAL', actions: [{ addToPlaylistCommand: {
+        openMiniplayer: false, videoId: id, listType: 'PLAYLIST_EDIT_LIST_TYPE_QUEUE', videoIds: [id],
+        onCreateListCommand: {
+          commandMetadata: { webCommandMetadata: { sendPost: true, apiUrl: '/youtubei/v1/playlist/create' } },
+          createPlaylistServiceEndpoint: { videoIds: [id], params: 'CAQ%3D' } },
+        videoCommand: {
+          commandMetadata: { webCommandMetadata: { url: '/watch?v=' + id, webPageType: 'WEB_PAGE_TYPE_WATCH', rootVe: 3832 } },
+          watchEndpoint: { videoId: id } } } }] } });
+    } catch (e) { toast('Could not queue it'); return; }
+    // The queue takes the entry a little later (longer when it first turns a mix into a queue), with the title a
+    // link did not carry; the notice waits for it, up to three seconds.
+    var tries = 0;
+    (function confirm() {
+      var list = playlistEntries(playlistData());
+      var added = list.filter(function (v) { return v.videoId === id; }).pop();
+      if (!added && ++tries < 15) { setTimeout(confirm, 200); return; }
+      toast((added ? 'Queued: ' : 'Queued, perhaps: ') + (title || (added ? textOf(added.title) : id))
+        + (added && list.length > 1 ? ' (' + list.length + ' in the queue)' : ''));
+    })();
+  }
+  function closeQueueList() {
+    var el = document.getElementById('ytpip-queue');
+    if (el) el.remove();
+  }
+  function showQueueList(toggle) {
+    if (document.getElementById('ytpip-queue')) {
+      if (toggle) closeQueueList();
+      return;
+    }
+    var data = playlistData();
+    var list = playlistEntries(data);
+    if (!list.length) { toast('The queue is empty'); return; }
+    var panel = document.createElement('div');
+    panel.id = 'ytpip-queue';
+    var heading = document.createElement('h2');
+    heading.textContent = (textOf(data.title) || 'Queue') + ' (' + list.length + ')';
+    panel.appendChild(heading);
+    list.forEach(function (v, i) {
+      var entry = document.createElement('button');
+      entry.className = 'ytpip-q' + (v.selected ? ' ytpip-q-now' : '');
+      entry.textContent = (v.selected ? '\u25b6 ' : (i + 1) + '. ') + (textOf(v.title) || v.videoId);
+      entry.addEventListener('click', function () {
+        closeQueueList();
+        var app = document.querySelector('ytd-app');
+        if (app && app.resolveCommand && v.navigationEndpoint) app.resolveCommand(v.navigationEndpoint);
+      });
+      panel.appendChild(entry);
+    });
+    document.documentElement.appendChild(panel);
+    var now = panel.querySelector('.ytpip-q-now');
+    if (now) now.scrollIntoView({ block: 'nearest' });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+    var key = e.key.toLowerCase();
+    if (key !== 'q' && key !== 'l') return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (key === 'l') {
+      showQueueList(true);
+      return;
+    }
+    var video = videoUnderPointer();
+    if (video) queueVideo(video.id, video.title);
+    else post({ queueClipboard: true });
+  }, true);
+  // Escape, a click anywhere else, or the next page closes the list.
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || !document.getElementById('ytpip-queue')) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    closeQueueList();
+  }, true);
+  document.addEventListener('mousedown', function (e) {
+    var el = document.getElementById('ytpip-queue');
+    if (el && !el.contains(e.target)) closeQueueList();
+  }, true);
+  document.addEventListener('yt-navigate-start', closeQueueList);
+
   // Ctrl+H hides the window (the host does it; Win+/ brings it back), from anywhere in it, as Ctrl+P plays.
   document.addEventListener('keydown', function (e) {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || (e.key !== 'h' && e.key !== 'H')) return;
@@ -324,6 +446,12 @@
       // From a key (the strip's Ctrl+P) it says what it did; from the strip's button, which shows it, not.
       if (d && d.togglePlay) togglePlay(d.togglePlay === 'key');
       if (d && d.next) playNext();
+      // The strip's Ctrl+Q: the video whose link was on the clipboard, or null when there was none.
+      if (d && 'queue' in d) {
+        if (d.queue) queueVideo(d.queue, '');
+        else toast('Point at a video, or copy its link, to queue it');
+      }
+      if (d && d.listQueue) showQueueList(false);
     });
   } catch (e) { /* no host bridge */ }
   // Whether the player's video plays, for the strip's play/pause button. Media events do not bubble, but

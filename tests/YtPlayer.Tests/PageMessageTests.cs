@@ -41,6 +41,10 @@ public class PageMessageTests
         => PageMessage.Parse(json).Collapse.ShouldBe(fold);
 
     [Fact]
+    public void QueueClipboardAsksForTheClipboardsVideo()
+        => PageMessage.Parse("""{"queueClipboard":true}""").QueueClipboard.ShouldBeTrue();
+
+    [Fact]
     public void HideAsksForTheWindowToHide() => PageMessage.Parse("""{"hide":true}""").Hide.ShouldBeTrue();
 
     [Fact]

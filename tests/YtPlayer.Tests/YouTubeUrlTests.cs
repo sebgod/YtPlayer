@@ -75,4 +75,14 @@ public class YouTubeUrlTests
     [InlineData("see https://youtu.be/dQw4w9WgXcQ")]
     public void APasteThatIsNotALinkOpensNothing(string? pasted)
         => YouTubeUrl.FromPastedLink(pasted).ShouldBeNull();
+
+    [Theory]
+    [InlineData("https://youtu.be/dQw4w9WgXcQ", "dQw4w9WgXcQ")]
+    [InlineData("youtube.com/watch?v=dQw4w9WgXcQ&t=83", "dQw4w9WgXcQ")]
+    [InlineData("https://www.youtube.com/shorts/dQw4w9WgXcQ", "dQw4w9WgXcQ")]
+    [InlineData("https://www.youtube.com/@channel", null)]
+    [InlineData("dQw4w9WgXcQ", null)]
+    [InlineData("some text", null)]
+    public void OnlyALinkToAVideoIsQueued(string pasted, string? id)
+        => YouTubeUrl.VideoIdFromPastedLink(pasted).ShouldBe(id);
 }
