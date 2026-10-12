@@ -10,15 +10,20 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   are logical, times `Scale` (the display's): window points are pixels on Windows and X11.
 - `Scripts/yt-tweaks.js` runs at document start on every page (`INativeWebView.AddScriptAtDocumentStartAsync`):
   Shorts hiding, the Shorts redirect, compact mode, the hidden miniplayer, ad skipping, and the Ctrl+F,
-  Ctrl+C, Ctrl+Shift+C, Ctrl+P, Ctrl+H and Ctrl+V keys. Host and page talk through `chrome.webview` messages:
-  `{ready}`, `{showing}`, `{paste}`, `{copy}`, `{skipAt}`, `{playing}`, `{hide}` from the page (read by
-  `PageMessage`), `{compact}`, `{search}`, `{copyLink}`, `{togglePlay}` from the host.
+  Ctrl+C, Ctrl+Shift+C, Ctrl+P, Ctrl+H, Ctrl+Up/Down and Ctrl+V keys. Host and page talk through `chrome.webview`
+  messages: `{ready}`, `{showing}`, `{paste}`, `{copy}`, `{skipAt}`, `{playing}`, `{hide}`, `{collapse}` from the
+  page (read by `PageMessage`), `{compact}`, `{search}`, `{copyLink}`, `{togglePlay}`, `{next}` from the host.
 - Win+/ is a global hotkey (`SdlVulkanWindow.TryRegisterGlobalHotKey`, Windows only): it shows the window if
   hidden, raises it and gives it the keyboard. Ctrl+H and `--start-minimised` hide it (`SdlVulkanWindow.Hide`,
   off the taskbar too), but only while Win+/ is ours to bring it back; otherwise they minimize it.
 - One player: `InstanceGate` (SharpAstro.AppShell, which comes with SdlVulkan.Renderer) is claimed at start; a
   later launch hands its arguments to the running player and exits before it has a window (`--start-minimised`
   just exits). The hand-off is drained in `OnLoopIteration`, which runs while the window is hidden too.
+- YouTube's fullscreen fills the screen: the window follows `INativeWebView.FullscreenChanged` (WebView2 only),
+  resizing inside that handler; `PipLayout.Fullscreen` is the page with no strip or border. To test it, use
+  YouTube's own fullscreen (its F, or its button), which makes the document element fullscreen. Asking for
+  fullscreen on `#movie_player` directly is not what YouTube does: YouTube moves that element when the view
+  grows, and the page drops out of fullscreen.
 - A double-click on the strip folds the window, as the collapse button does. SDL gives the app no click on a
   draggable area, so it comes from `SdlVulkanWindow.TryReportCaptionDoubleClicks` (Windows only).
 - `tools/page-check.mjs` drives that script in a headless Edge against live YouTube (search, compact,

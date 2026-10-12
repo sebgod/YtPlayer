@@ -35,7 +35,8 @@ internal sealed class PipChrome(VkRenderer renderer, string? font)
 
     public void Draw(PipLayout layout, ChromeState state)
     {
-        if (layout.Width <= 0)
+        // Fullscreen, the page is all there is.
+        if (layout.Width <= 0 || layout.Fullscreen)
             return;
         // Window points to the renderer's pixels.
         var scale = renderer.Width / (float)layout.Width;
@@ -71,6 +72,11 @@ internal sealed class PipChrome(VkRenderer renderer, string? font)
                     }
                     else
                         FillPlayTriangle(cx - u * 0.6f, cy, u * 1.6f, u);
+                    break;
+                case PipButton.Next:
+                    // The next video: a triangle against a bar.
+                    FillPlayTriangle(cx - u * 0.9f, cy, u * 1.3f, u);
+                    renderer.FillRectangle(Rect(cx + u * 0.5f, cy - u, u * 0.45f, u * 2), Ink);
                     break;
                 case PipButton.Collapse:
                     // A chevron: up folds the window to the strip, down unfolds it.

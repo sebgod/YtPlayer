@@ -13,7 +13,7 @@ namespace YtPlayer;
 /// <summary>
 /// A picture-in-picture YouTube player: a small borderless window that stays on top, showing YouTube
 /// in the platform's web view (WebView2 on Windows, WebKitGTK on Linux) under a thin strip that drags
-/// the window and holds four buttons: back, compact (the video alone), stay on top, close.
+/// the window and holds its buttons: back, play/pause, next, collapse, compact (the video alone), stay on top, close.
 /// </summary>
 /// <remarks>Usage: <c>ytplayer [--start-minimised] [video URL | video id | search words]</c>. With a player already
 /// running, it gets the video or search instead, and comes forward.</remarks>
@@ -99,8 +99,17 @@ internal static class Program
         // mode's, with the width it has now, so it stays in place (WindowFit.Switch). Collapsed, only the
         // size it will unfold to changes; the window stays a strip.
         int? narrowPipWidth = null;
+        // Fullscreen (YouTube's, see SetFullscreen) the window is the display's size, which is neither mode's: a
+        // switch waits until it ends.
+        var fullscreen = false;
+        bool? showingAfterFullscreen = null;
         void ShowCompact(bool on)
         {
+            if (fullscreen)
+            {
+                showingAfterFullscreen = on;
+                return;
+            }
             if (on == showing)
                 return;
             var (w, h) = Size();
@@ -144,9 +153,13 @@ internal static class Program
         {
             var message = PageMessage.Parse(json);
             // The page asks for the compact state when it is ready (every full load), since a
-            // document-start script cannot know it.
+            // document-start script cannot know it. A new document is never fullscreen, and leaving the old
+            // one that was (a pasted link, a launch's hand-off) says nothing, so the window leaves it here.
             if (message.Ready)
+            {
+                SetFullscreen(false);
                 web.PostMessage(CompactMessage(compact));
+            }
             if (message.Showing is { } on)
                 ShowCompact(on);
             if (message.Paste is { } pasted)
@@ -168,6 +181,8 @@ internal static class Program
             }
             if (message.Hide)
                 Hide();
+            if (message.Collapse is { } fold)
+                SetCollapsed(fold);
         });
         web.TitleChanged += title => UiQueue.Enqueue(() =>
         {
@@ -189,11 +204,44 @@ internal static class Program
                 window.Minimize();
         }
 
+        // YouTube's fullscreen (F, its button, a double-click on the video) would fill only the web view, which is
+        // the small window: while it lasts the window fills its display, with no strip or border, and leaving it
+        // (Esc, F) puts the window back where and as big as it was. SDL rebuilds the window's style on the way
+        // out, which gives back the maximize box a caption double-click would use, so it is taken away again.
+        void SetFullscreen(bool on)
+        {
+            if (on == fullscreen || collapsed)
+                return;
+            fullscreen = on;
+            SetWindowFullscreen(window.Handle, on);
+            if (!on)
+                window.SetMaximizable(false);
+            _layout = CurrentLayout(window, collapsed, fullscreen);
+            web.SetBounds(WebViewPixels(_layout, window));
+            if (!on && showingAfterFullscreen is { } pending)
+            {
+                showingAfterFullscreen = null;
+                ShowCompact(pending);
+            }
+        }
+
+        // The web view says when the page goes fullscreen or leaves it, and the window follows within the event,
+        // which WebView2 raises on this thread. The Linux backend does not raise it yet, so there the page fills
+        // the view.
+        web.FullscreenChanged += full =>
+        {
+            if (OperatingSystem.IsWindows())
+                SetFullscreen(full);
+            else
+                UiQueue.Enqueue(() => SetFullscreen(full));
+        };
+
         // The collapse button: fold the window to its strip, the video playing on behind it, and unfold
         // it to the size it had. The corner nearest the screen's corner stays put either way.
         void SetCollapsed(bool on)
         {
-            if (on == collapsed)
+            // Fullscreen, there is no strip to fold to.
+            if (on == collapsed || fullscreen)
                 return;
             GetWindowSize(window.Handle, out var w, out var h);
             window.GetPosition(out var wx, out var wy);
@@ -215,7 +263,7 @@ internal static class Program
                 Fit(window, current, expanded, showing);
                 web.SetVisible(true);
             }
-            _layout = CurrentLayout(window, collapsed);
+            _layout = CurrentLayout(window, collapsed, fullscreen);
             if (!collapsed)
                 web.SetBounds(WebViewPixels(_layout, window));
         }
@@ -226,7 +274,7 @@ internal static class Program
             OnRender = () => chrome.Draw(_layout, new ChromeState(compact, showing, onTop, playing, stripTitle)),
             OnResize = (_, _) =>
             {
-                _layout = CurrentLayout(window, collapsed);
+                _layout = CurrentLayout(window, collapsed, fullscreen);
                 if (!collapsed)
                     web.SetBounds(WebViewPixels(_layout, window));
             },
@@ -264,6 +312,17 @@ internal static class Program
                     case (InputModifier.Ctrl, InputKey.H):
                         Hide();
                         return true;
+                    // Fold and unfold, as the chevron does; the page sends the same keys as {collapse}.
+                    case (InputModifier.Ctrl, InputKey.Up):
+                        SetCollapsed(true);
+                        return true;
+                    case (InputModifier.Ctrl, InputKey.Down):
+                        SetCollapsed(false);
+                        return true;
+                    // YouTube's own key for the next video, which the page takes itself; the strip passes it on.
+                    case (InputModifier.Shift, InputKey.N):
+                        web.PostMessage("""{"next":true}""");
+                        return true;
                     default:
                         return false;
                 }
@@ -279,6 +338,9 @@ internal static class Program
                         break;
                     case PipButton.PlayPause:
                         web.PostMessage("""{"togglePlay":true}""");
+                        break;
+                    case PipButton.Next:
+                        web.PostMessage("""{"next":true}""");
                         break;
                     case PipButton.Collapse:
                         SetCollapsed(!collapsed);
@@ -377,6 +439,8 @@ internal static class Program
 
         loop.Run();
 
+        // Fullscreen, the window's place and size are the display's; the ones to remember are those it goes back to.
+        SetFullscreen(false);
         window.GetPosition(out var px, out var py);
         var (exitW, exitH) = Size();
         if (showing)
@@ -485,10 +549,10 @@ internal static class Program
         => arg.Equals("--start-minimised", StringComparison.OrdinalIgnoreCase)
            || arg.Equals("--start-minimized", StringComparison.OrdinalIgnoreCase);
 
-    private static PipLayout CurrentLayout(SdlVulkanWindow window, bool collapsed)
+    private static PipLayout CurrentLayout(SdlVulkanWindow window, bool collapsed, bool fullscreen = false)
     {
         GetWindowSize(window.Handle, out var w, out var h);
-        return new PipLayout(w, h, collapsed, window.DisplayScale);
+        return new PipLayout(w, h, collapsed, window.DisplayScale, fullscreen);
     }
 
     // The layout is in window points; the web view is placed in pixels.
