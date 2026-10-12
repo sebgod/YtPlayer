@@ -30,6 +30,7 @@ public class PipLayoutTests
     [Theory]
     [InlineData(17, 14, PipButton.Back)]
     [InlineData(50, 14, PipButton.PlayPause)]
+    [InlineData(85, 14, PipButton.Next)]
     [InlineData(360, 14, PipButton.Collapse)]
     [InlineData(400, 14, PipButton.Compact)]
     [InlineData(430, 14, PipButton.Pin)]
@@ -41,7 +42,7 @@ public class PipLayoutTests
 
     [Fact]
     public void TheTitleSitsBetweenTheButtons()
-        => Layout.Title.ShouldBe(new Box(74, 0, 264, 28)); // 68 + 6 to 344 - 6
+        => Layout.Title.ShouldBe(new Box(108, 0, 230, 28)); // 102 + 6 to 344 - 6
 
     private static readonly PipLayout Collapsed = new(480, PipLayout.CollapsedHeightAt(1), Collapsed: true);
 
@@ -65,7 +66,7 @@ public class PipLayoutTests
     {
         Scaled.WebView.ShouldBe(new Box(6, 42, 708, 402));
         Scaled.ButtonBox(PipButton.Close).ShouldBe(new Box(669, 0, 51, 42));
-        Scaled.Title.ShouldBe(new Box(111, 0, 396, 42)); // 102 + 9 to 516 - 9
+        Scaled.Title.ShouldBe(new Box(162, 0, 345, 42)); // 153 + 9 to 516 - 9
         PipLayout.CollapsedHeightAt(1.5f).ShouldBe(48);
     }
 
@@ -79,6 +80,22 @@ public class PipLayoutTests
     [Fact]
     public void ScaledEachButtonIsWhereItIsDrawn()
         => Scaled.ButtonAt(700, 40).ShouldBe(PipButton.Close);
+
+    // Fullscreen, the page is the whole window: no strip, no border, nothing to drag or resize.
+    private static readonly PipLayout Fullscreen = new(2880, 1920, Scale: 1.5f, Fullscreen: true);
+
+    [Fact]
+    public void FullscreenThePageIsTheWholeWindow() => Fullscreen.WebView.ShouldBe(new Box(0, 0, 2880, 1920));
+
+    [Theory]
+    [InlineData(1, 1)] // a corner, which resizes otherwise
+    [InlineData(1440, 20)] // the strip, which drags otherwise
+    [InlineData(2860, 20)] // the close button
+    public void FullscreenNothingDragsResizesOrIsAButton(float x, float y)
+    {
+        Fullscreen.HitTest(x, y).ShouldBe(HitTestResult.Normal);
+        Fullscreen.ButtonAt(x, y).ShouldBe(PipButton.None);
+    }
 
     [Fact]
     public void AButtonIsNotADragHandle()

@@ -136,6 +136,13 @@ s = await state();
 check('Ctrl+P in the search box resumes it', s.video?.paused === false && s.focusedSearch, { video: s.video, focusedSearch: s.focusedSearch });
 await press('Escape', 'Escape', 27); await sleep(500);
 
+// Ctrl+Up asks the host to fold the window to its strip, Ctrl+Down to unfold it.
+await evaluate(`window.__posted.length = 0`);
+await press('ArrowUp', 'ArrowUp', 38, 2); await sleep(200);
+await press('ArrowDown', 'ArrowDown', 40, 2); await sleep(300);
+s = await state();
+check('Ctrl+Up and Ctrl+Down ask the host to fold and unfold', s.posted.some(m => m.collapse === true) && s.posted.some(m => m.collapse === false), s.posted);
+
 // Ctrl+H asks the host to hide the window (the host hides it; Win+/ brings it back).
 await evaluate(`window.__posted.length = 0`);
 await press('h', 'KeyH', 72, 2); await sleep(300);
@@ -227,6 +234,13 @@ await evaluate(`window.__host({ compact: false })`); await sleep(300);
 await evaluate(`window.__host({ compact: true })`); await sleep(4000);
 s = await state();
 check('compact on with a background video: back to it', s.path === '/watch' && s.compact, { path: s.path, compact: s.compact, video: s.video });
+
+// 8. The strip's next button: the player's own next (here autoplay's or the mix's pick) plays.
+const before = await evaluate(`new URLSearchParams(location.search).get('v')`);
+await evaluate(`window.__host({ next: true })`); await sleep(5000);
+const after = await evaluate(`new URLSearchParams(location.search).get('v')`);
+s = await state();
+check('next: another video plays', !!after && after !== before && s.video && !s.video.paused, { before, after, video: s.video });
 
 ws.close(); proc.kill();
 console.log(failures ? `${failures} FAILED` : 'ALL PASSED');

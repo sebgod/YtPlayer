@@ -33,8 +33,10 @@ To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` 
   Double-click it to fold the window to the strip, and again to unfold it (Windows).
 - **Back** (`<`) goes back a page.
 - **Play/pause** (beside it): ▶ while paused, ❚❚ while playing; it follows the video, media keys included.
+- **Next** (▶❘, beside that): the next video, a playlist's next or YouTube's autoplay pick.
 - **The title** of what is on, in the strip between the buttons.
 - **Collapse** (the chevron) folds the window to its strip, the video playing on; again unfolds it to the size it had.
+  Ctrl+Up and Ctrl+Down do the same.
 - **Compact** (the screen icon) shows the video alone, filling the window, with YouTube's own controls.
   Turn it off to browse. It applies only on a video's page: anywhere else YouTube shows as usual, and
   compact takes over when you open a video (the icon's red picture is outlined while it waits, filled
@@ -44,6 +46,9 @@ To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` 
 - **Close** (`×`).
 
 The taskbar icon turns red, with an equalizer in its little picture, while the video plays.
+
+YouTube's **fullscreen** (F, its button, a double-click on the video) fills the screen, not just the window
+(Windows); Esc or F again puts the window back where it was.
 
 The buttons act on the first click even while another window is active. While the window is active its strip
 is a lighter grey, and keys go to the page, so space or Ctrl+F reach the video after a click on the strip.
@@ -61,6 +66,9 @@ and remembers each size, as you last left it, between runs; so are its position 
 | **Ctrl+C** | with nothing selected, copies the video's link (`https://youtu.be/…`); with a selection, a normal copy |
 | **Ctrl+Shift+C** | copies the video's link at the current time (`…?t=83`) |
 | **Ctrl+P** | play/pause, from anywhere in the window, the search box included |
+| **Ctrl+Up** / **Ctrl+Down** | fold the window to its strip / unfold it |
+| **Shift+N** | the next video (YouTube's own key; on the folded strip too) |
+| **F** | YouTube's fullscreen, which fills the screen; Esc or F again leaves it |
 | media keys, headset button | play/pause, as with YouTube in a browser |
 
 ## Signing in, and what is hidden

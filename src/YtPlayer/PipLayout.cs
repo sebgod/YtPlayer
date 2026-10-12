@@ -2,7 +2,7 @@ using static SDL3.SDL;
 
 namespace YtPlayer;
 
-public enum PipButton { None, Back, PlayPause, Collapse, Compact, Pin, Close }
+public enum PipButton { None, Back, PlayPause, Next, Collapse, Compact, Pin, Close }
 
 /// <summary>An integer rectangle in window points (SDL's window coordinates).</summary>
 internal readonly record struct Box(int X, int Y, int W, int H)
@@ -20,7 +20,10 @@ internal readonly record struct Box(int X, int Y, int W, int H)
 /// </summary>
 /// <param name="Scale">The display's scale (1 at 96 dpi): window points are pixels on Windows and X11, so
 /// the strip's logical sizes are multiplied by it, or at 150% it would be two thirds the size it should.</param>
-internal readonly record struct PipLayout(int Width, int Height, bool Collapsed = false, float Scale = 1)
+/// <param name="Fullscreen">The page is fullscreen and the window fills the screen: the web view is all of it,
+/// with no strip or border, and nothing drags or resizes.</param>
+internal readonly record struct PipLayout(int Width, int Height, bool Collapsed = false, float Scale = 1,
+    bool Fullscreen = false)
 {
     public int StripHeight => Scaled(28);
     public int Border => Scaled(4);
@@ -36,18 +39,21 @@ internal readonly record struct PipLayout(int Width, int Height, bool Collapsed 
 
     private int Scaled(int logical) => (int)MathF.Round(logical * Scale);
 
-    public Box WebView => Collapsed
-        ? default
-        : new(Border, StripHeight, Math.Max(0, Width - 2 * Border), Math.Max(0, Height - StripHeight - Border));
+    public Box WebView => Fullscreen
+        ? new(0, 0, Width, Height)
+        : Collapsed
+            ? default
+            : new(Border, StripHeight, Math.Max(0, Width - 2 * Border), Math.Max(0, Height - StripHeight - Border));
 
-    /// <summary>Where the title goes: the strip between the two buttons on the left and the four on the right.</summary>
-    public Box Title => new(2 * ButtonWidth + TitlePadding, 0,
-        Math.Max(0, Width - 6 * ButtonWidth - 2 * TitlePadding), StripHeight);
+    /// <summary>Where the title goes: the strip between the three buttons on the left and the four on the right.</summary>
+    public Box Title => new(3 * ButtonWidth + TitlePadding, 0,
+        Math.Max(0, Width - 7 * ButtonWidth - 2 * TitlePadding), StripHeight);
 
     public Box ButtonBox(PipButton button) => button switch
     {
         PipButton.Back => new(0, 0, ButtonWidth, StripHeight),
         PipButton.PlayPause => new(ButtonWidth, 0, ButtonWidth, StripHeight),
+        PipButton.Next => new(2 * ButtonWidth, 0, ButtonWidth, StripHeight),
         PipButton.Close => new(Width - ButtonWidth, 0, ButtonWidth, StripHeight),
         PipButton.Pin => new(Width - 2 * ButtonWidth, 0, ButtonWidth, StripHeight),
         PipButton.Compact => new(Width - 3 * ButtonWidth, 0, ButtonWidth, StripHeight),
@@ -56,12 +62,12 @@ internal readonly record struct PipLayout(int Width, int Height, bool Collapsed 
     };
 
     public static ReadOnlySpan<PipButton> Buttons =>
-        [PipButton.Back, PipButton.PlayPause, PipButton.Collapse, PipButton.Compact, PipButton.Pin, PipButton.Close];
+        [PipButton.Back, PipButton.PlayPause, PipButton.Next, PipButton.Collapse, PipButton.Compact, PipButton.Pin, PipButton.Close];
 
     public PipButton ButtonAt(float x, float y)
     {
         // The top Border rows resize, so a button starts below them (collapsed, nothing resizes).
-        if (y < Border && !Collapsed)
+        if (Fullscreen || (y < Border && !Collapsed))
             return PipButton.None;
         foreach (var button in Buttons)
             if (ButtonBox(button).Contains(x, y))
@@ -71,6 +77,8 @@ internal readonly record struct PipLayout(int Width, int Height, bool Collapsed 
 
     public HitTestResult HitTest(float x, float y)
     {
+        if (Fullscreen)
+            return HitTestResult.Normal;
         if (Collapsed)
             return ButtonAt(x, y) != PipButton.None ? HitTestResult.Normal : HitTestResult.Draggable;
 

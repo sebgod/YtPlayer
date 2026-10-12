@@ -34,6 +34,12 @@ public class PageMessageTests
     public void PlayingSaysWhetherTheVideoPlays(string json, bool playing)
         => PageMessage.Parse(json).Playing.ShouldBe(playing);
 
+    [Theory]
+    [InlineData("""{"collapse":true}""", true)]
+    [InlineData("""{"collapse":false}""", false)]
+    public void CollapseFoldsOrUnfoldsTheWindow(string json, bool fold)
+        => PageMessage.Parse(json).Collapse.ShouldBe(fold);
+
     [Fact]
     public void HideAsksForTheWindowToHide() => PageMessage.Parse("""{"hide":true}""").Hide.ShouldBeTrue();
 

@@ -275,6 +275,29 @@
     togglePlay(true);
   }, true);
 
+  // Ctrl+Up folds the window to its strip, as the strip's chevron does (the host does it); Ctrl+Down, which the
+  // strip takes once folded, unfolds it. From anywhere in the window, as Ctrl+P plays.
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    post({ collapse: e.key === 'ArrowUp' });
+  }, true);
+
+  // The strip's next button (and Shift+N on the folded strip): the player's own next, a playlist's next or
+  // autoplay's pick. YouTube's own Shift+N does the same in the page.
+  function playNext() {
+    var next = document.querySelector('#movie_player .ytp-next-button');
+    if (next && next.getAttribute('aria-disabled') !== 'true' && getComputedStyle(next).display !== 'none') {
+      next.click();
+      return;
+    }
+    var player = document.getElementById('movie_player');
+    try {
+      if (player && player.nextVideo) player.nextVideo();
+    } catch (e) { /* not YouTube's player API after all */ }
+  }
+
   // Ctrl+H hides the window (the host does it; Win+/ brings it back), from anywhere in it, as Ctrl+P plays.
   document.addEventListener('keydown', function (e) {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || (e.key !== 'h' && e.key !== 'H')) return;
@@ -300,6 +323,7 @@
       if (d && d.copyLink) copyLink(d.copyLink === 'time');
       // From a key (the strip's Ctrl+P) it says what it did; from the strip's button, which shows it, not.
       if (d && d.togglePlay) togglePlay(d.togglePlay === 'key');
+      if (d && d.next) playNext();
     });
   } catch (e) { /* no host bridge */ }
   // Whether the player's video plays, for the strip's play/pause button. Media events do not bubble, but
