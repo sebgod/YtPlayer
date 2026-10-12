@@ -1,20 +1,55 @@
 using DIR.Lib;
-using SdlVulkan.Renderer;
+using static SDL3.SDL;
+using B = DIR.Lib.Layout.Builder;
+using Layout = DIR.Lib.Layout;
 
 namespace YtPlayer;
 
-/// <summary>What the strip shows besides its buttons' shapes.</summary>
+public enum PipButton { Back, PlayPause, Next, Collapse, Compact, Pin, Close }
+
+/// <summary>How the window shows the page.</summary>
+internal enum PipMode
+{
+    /// <summary>The strip along the top, the page below it, and a thin border around the rest that resizes.</summary>
+    Normal,
+
+    /// <summary>The strip alone (the collapse button), the video playing on behind it: no page, and nothing
+    /// resizes, as there is nothing to resize to.</summary>
+    Collapsed,
+
+    /// <summary>The page is fullscreen and the window fills the screen: the page is all of it, with no strip or
+    /// border, and nothing drags or resizes.</summary>
+    Fullscreen,
+}
+
+/// <summary>What the window shows besides the page itself.</summary>
+/// <param name="Mode">Strip and page, the strip alone, or the page alone.</param>
+/// <param name="Active">The window is the active one (<see cref="PipChrome{TSurface}.ActiveBackground"/>).</param>
 /// <param name="Compact">Compact is on (the user's choice).</param>
 /// <param name="Showing">Compact is on screen (a watch page, not searching).</param>
 /// <param name="OnTop">The window stays on top.</param>
 /// <param name="Playing">The player's video is playing.</param>
 /// <param name="Title">The page's title, for the strip; null shows none.</param>
-internal readonly record struct ChromeState(bool Compact, bool Showing, bool OnTop, bool Playing, string? Title);
+internal readonly record struct ChromeState(PipMode Mode, bool Active, bool Compact, bool Showing, bool OnTop,
+    bool Playing, string? Title);
 
-/// <summary>Draws the strip and border around the web view: the buttons, which one the pointer is over,
-/// and the title. Everything the window shows besides the page itself.</summary>
-/// <param name="font">A font file for the title (DIR.Lib's FontResolver); null leaves the title out.</param>
-internal sealed class PipChrome(VkRenderer renderer, string? font)
+/// <summary>What a press on the window's frame does, for SDL's hit test: the strip drags the window, the border
+/// resizes it from an edge or a corner.</summary>
+internal sealed record FrameHit(HitTestResult Area) : HitResult;
+
+/// <summary>
+/// Everything the window shows besides the page: the strip along the top (back, play/pause, next, the title,
+/// collapse, compact, stay on top, close) and the border around the page, as one <see cref="Layout.Node"/> tree.
+/// Its sizes are design units, which the measure context maps to pixels at <see cref="PixelWidgetBase{TSurface}.DpiScale"/>
+/// (the display's, which the host sets). The painter draws the tree and binds each button's press to the rect it
+/// drew it in; the router reads those regions for the clicks and the hover, SDL's hit test asks them what drags
+/// and what resizes, and the web view goes where the tree's web leaf was arranged. Nothing is placed by hand, so
+/// what is drawn, what is pressed and where the page sits cannot disagree.
+/// </summary>
+/// <remarks>The window is borderless, so the hit test (<see cref="FrameAreaAt"/>) is what gives it the OS's move
+/// and resize. The web view covers its own rect and takes its own input, so only the strip and the border reach
+/// this.</remarks>
+internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWidgetBase<TSurface>(renderer)
 {
     public static readonly RGBAColor32 Background = new(0x18, 0x18, 0x1c, 0xff);
     /// <summary>The strip and border while the window is the active one, so it is plain when keys go to it
@@ -26,138 +61,173 @@ internal sealed class PipChrome(VkRenderer renderer, string? font)
     private static readonly RGBAColor32 Ink = new(0xd8, 0xd8, 0xdc, 0xff);
     private static readonly RGBAColor32 TitleInk = new(0xb4, 0xb4, 0xbc, 0xff);
     private static readonly RGBAColor32 Accent = new(0xff, 0x30, 0x30, 0xff);
+
+    // Design units, mapped to pixels by the measure context.
+    private const float StripHeight = 28;
+    private const float Border = 4;
+    private const float ButtonWidth = 34;
+    // How far from a corner, along either edge, a resize takes the corner.
+    private const float CornerGrip = 14;
+    private const float MarkSize = 10;
+    private const float MarkStroke = 1.5f;
     private const float TitleSize = 12;
+    private const float TitlePadding = 6;
+    // A title with less room than this is left out rather than cut to an ellipsis alone.
+    private const float TitleMinimum = 24;
 
-    // The last title fitted to the strip, so a redraw does not measure it again.
-    private (string Title, float Width, string Fitted) _fittedTitle = ("", 0, "");
+    // The Fill leaves: the page's web view, and the marks no IconKind names, which DrawFill draws.
+    private const string WebViewKey = "web";
+    private const string CompactMark = "compact";
+    private const string PinMark = "pin";
+    private const string CloseMark = "close";
 
-    public PipButton Hovered { get; set; }
+    // What the last Render showed, for the marks DrawFill draws.
+    private ChromeState _painted;
 
-    public void Draw(PipLayout layout, ChromeState state)
+    /// <summary>What a press on a strip button does; the host's.</summary>
+    public Action<PipButton>? Pressed { get; set; }
+
+    /// <summary>Paints the tree over the whole surface, binding the presses to where it drew.</summary>
+    public void Render(ChromeState state)
     {
-        // Fullscreen, the page is all there is.
-        if (layout.Width <= 0 || layout.Fullscreen)
-            return;
-        // Window points to the renderer's pixels.
-        var scale = renderer.Width / (float)layout.Width;
-        // Logical sizes (a mark, a line, the title's text) to the renderer's pixels: the display's scale too.
-        var ui = scale * layout.Scale;
+        _painted = state;
+        BeginFrame();
+        RenderLayout(Build(state), new RectF32(0, 0, Renderer.Width, Renderer.Height), drawFill: DrawFill);
+    }
 
-        foreach (var button in PipLayout.Buttons)
+    /// <summary>Where the web view goes in a surface of this size, in pixels: the tree's web leaf, arranged as
+    /// the next paint will arrange it. Empty while collapsed, when there is no page to show.</summary>
+    public RectInt WebViewBounds(ChromeState state, int width, int height)
+    {
+        foreach (var (node, rect) in ArrangeLayout(Build(state), new RectF32(0, 0, width, height)))
         {
-            var b = layout.ButtonBox(button);
-            var x0 = b.X * scale;
-            var y0 = b.Y * scale;
-            var w = b.W * scale;
-            var h = b.H * scale;
-            if (button == Hovered)
-                renderer.FillRectangle(Rect(x0, y0, w, h), button == PipButton.Close ? CloseHover : Hover);
-
-            var cx = x0 + w / 2;
-            var cy = y0 + h / 2;
-            var u = 5 * ui; // half the size of a mark
-            var t = Math.Max(1, (int)MathF.Round(1.5f * ui));
-            switch (button)
-            {
-                case PipButton.Back:
-                    renderer.DrawLine(cx + u / 2, cy - u, cx - u / 2, cy, Ink, t);
-                    renderer.DrawLine(cx - u / 2, cy, cx + u / 2, cy + u, Ink, t);
-                    break;
-                case PipButton.PlayPause:
-                    // What a press does: two bars while playing, a triangle while paused.
-                    if (state.Playing)
-                    {
-                        renderer.FillRectangle(Rect(cx - u * 0.8f, cy - u, u * 0.55f, u * 2), Ink);
-                        renderer.FillRectangle(Rect(cx + u * 0.25f, cy - u, u * 0.55f, u * 2), Ink);
-                    }
-                    else
-                        FillPlayTriangle(cx - u * 0.6f, cy, u * 1.6f, u);
-                    break;
-                case PipButton.Next:
-                    // The next video: a triangle against a bar.
-                    FillPlayTriangle(cx - u * 0.9f, cy, u * 1.3f, u);
-                    renderer.FillRectangle(Rect(cx + u * 0.5f, cy - u, u * 0.45f, u * 2), Ink);
-                    break;
-                case PipButton.Collapse:
-                    // A chevron: up folds the window to the strip, down unfolds it.
-                    var dy = layout.Collapsed ? u / 2 : -u / 2;
-                    renderer.DrawLine(cx - u, cy - dy, cx, cy + dy, Ink, t);
-                    renderer.DrawLine(cx, cy + dy, cx + u, cy - dy, Ink, t);
-                    break;
-                case PipButton.Compact:
-                    // A screen; in compact mode with the small picture filled, showing what is on.
-                    // Compact on away from a video only outlines it: it waits for the next video.
-                    renderer.DrawRectangle(Rect(cx - u * 1.3f, cy - u, u * 2.6f, u * 2), Ink, t);
-                    var picture = Rect(cx, cy, u * 1.1f, u * 0.8f);
-                    if (state.Compact && state.Showing)
-                        renderer.FillRectangle(picture, Accent);
-                    else if (state.Compact)
-                        renderer.DrawRectangle(picture, Accent, t);
-                    break;
-                case PipButton.Pin:
-                    // A dot: filled while the window stays on top.
-                    var dot = Rect(cx - u * 0.8f, cy - u * 0.8f, u * 1.6f, u * 1.6f);
-                    if (state.OnTop)
-                        renderer.FillEllipse(dot, Accent);
-                    else
-                        renderer.DrawEllipseOutline(dot, Ink, t);
-                    break;
-                case PipButton.Close:
-                    renderer.DrawLine(cx - u, cy - u, cx + u, cy + u, Ink, t);
-                    renderer.DrawLine(cx - u, cy + u, cx + u, cy - u, Ink, t);
-                    break;
-            }
+            if (node is Layout.Node.Leaf { Content: Layout.Content.Fill { Key: WebViewKey } })
+                return Pixels(rect.X, rect.Y, rect.Width, rect.Height);
         }
-
-        DrawTitle(layout.Title, state.Title, scale, ui);
+        return default;
     }
 
-    private void DrawTitle(Box box, string? title, float scale, float ui)
-    {
-        var width = box.W * scale;
-        if (font is null || string.IsNullOrWhiteSpace(title) || width < 24 * ui)
-            return;
-        var size = TitleSize * ui;
-        if (_fittedTitle.Title != title || _fittedTitle.Width != width)
-            _fittedTitle = (title, width, Ellipsize(title, size, width));
-        if (_fittedTitle.Fitted.Length == 0)
-            return;
-        renderer.DrawText(_fittedTitle.Fitted, font, size, TitleInk,
-            Rect(box.X * scale, box.Y * scale, width, box.H * scale), TextAlign.Near, TextAlign.Center);
-    }
+    /// <summary>How tall the window is collapsed, in pixels: the strip and the border under it, measured.</summary>
+    public int CollapsedHeight()
+        => (int)MathF.Round(MeasureLayout(Build(default(ChromeState) with { Mode = PipMode.Collapsed }),
+            new Layout.Size<float>(Renderer.Width, float.MaxValue)).Height);
 
-    // The longest start of text that fits in maxWidth with an ellipsis after it, or all of it if it fits.
-    private string Ellipsize(string text, float size, float maxWidth)
+    /// <summary>What SDL's hit test answers at (x, y) in pixels: what the last paint put there. The strip drags,
+    /// the border resizes, and a button or the page is the window's own.</summary>
+    public HitTestResult FrameAreaAt(float x, float y)
+        => HitTest(x, y) is FrameHit frame ? frame.Area : HitTestResult.Normal;
+
+    internal Layout.Node Build(ChromeState state)
     {
-        if (renderer.MeasureText(text, font!, size).Width <= maxWidth)
-            return text;
-        int fits = 0, tooLong = text.Length;
-        while (tooLong - fits > 1)
+        var page = B.Fill(key: WebViewKey).Stretch();
+        var background = state.Active ? ActiveBackground : Background;
+        return state.Mode switch
         {
-            var mid = (fits + tooLong) / 2;
-            if (renderer.MeasureText(string.Concat(text.AsSpan(0, mid).TrimEnd(), "…"), font!, size).Width <= maxWidth)
-                fits = mid;
-            else
-                tooLong = mid;
-        }
-        return fits == 0 ? "" : string.Concat(text.AsSpan(0, fits).TrimEnd(), "…");
+            // Fullscreen, the page is all there is.
+            PipMode.Fullscreen => page,
+            // Collapsed, all of it drags but the buttons.
+            PipMode.Collapsed => B.VStack(Strip(state), B.Spacer().RowH(Border))
+                .Bg(background)
+                .Clickable(new FrameHit(HitTestResult.Draggable)),
+            _ => B.Overlay(
+                B.Dock(page,
+                        B.Top(Strip(state), StripHeight),
+                        B.Left(B.Spacer(), Border),
+                        B.Right(B.Spacer(), Border),
+                        B.Bottom(B.Spacer(), Border))
+                    .Bg(background),
+                Grips()),
+        };
     }
 
-    // A right-pointing triangle: its left edge at x, width wide, 2 * halfHeight tall about cy. Filled a row
-    // at a time, as the renderer has no polygon fill.
-    private void FillPlayTriangle(float x, float cy, float width, float halfHeight)
+    // The buttons and the title. All of it drags but the buttons.
+    private Layout.Node Strip(ChromeState state)
+        => B.HStack(
+                Button(PipButton.Back, B.Icon(Layout.IconKind.CaretLeft, MarkSize, Ink)),
+                // What a press does: two bars while playing, a triangle while paused.
+                Button(PipButton.PlayPause, state.Playing
+                    ? B.HStack(B.Box(2.75f, MarkSize, Ink), B.Box(2.75f, MarkSize, Ink)).WithGap(2.5f)
+                    : B.Icon(Layout.IconKind.CaretRight, MarkSize, Ink)),
+                // The next video: a triangle against a bar.
+                Button(PipButton.Next,
+                    B.HStack(B.Icon(Layout.IconKind.CaretRight, 8, Ink), B.Box(2.25f, 8, Ink)).WithGap(0.5f)),
+                Title(state.Title),
+                // Up folds the window to the strip, down unfolds it.
+                Button(PipButton.Collapse, B.Icon(
+                    state.Mode == PipMode.Collapsed ? Layout.IconKind.CaretDown : Layout.IconKind.CaretUp, 8, Ink)),
+                Button(PipButton.Compact, B.Fill(13, MarkSize, CompactMark)),
+                Button(PipButton.Pin, B.Fill(8, 8, PinMark)),
+                Button(PipButton.Close, B.Fill(MarkSize, MarkSize, CloseMark)))
+            .RowH(StripHeight)
+            .Clickable(new FrameHit(HitTestResult.Draggable));
+
+    // A button: its mark centred, lit while the pointer is over it.
+    private Layout.Node Button(PipButton button, Layout.Node mark)
+        => B.HStack(B.Spacer().WStar(), mark, B.Spacer().WStar())
+            .Align(Layout.CrossAlign.Center)
+            .ColW(ButtonWidth)
+            .BgHover(button == PipButton.Close ? CloseHover : Hover)
+            .Clickable(new HitResult.ButtonHit(button.ToString()), _ => Pressed?.Invoke(button));
+
+    // The page's title, cut to an ellipsis to fit, between the three buttons on the left and the four on the right
+    // (whose room it keeps when there is none).
+    private Layout.Node Title(string? title)
+        => B.HStack(string.IsNullOrWhiteSpace(title) || FontPath.Length == 0
+                ? B.Spacer()
+                : B.Text(title, TitleSize, TitleInk).Stretch().CollapseBelow(TitleMinimum))
+            .Pad(TitlePadding, 0)
+            .Stretch();
+
+    // The border resizes: along each edge, and from the corner within CornerGrip of one. Over the strip's top rows
+    // too, so the top edge resizes above the buttons.
+    private static Layout.Node Grips()
     {
-        var top = (int)MathF.Floor(cy - halfHeight);
-        var bottom = (int)MathF.Ceiling(cy + halfHeight);
-        for (var row = top; row < bottom; row++)
+        static Layout.Node Grip(HitTestResult area) => B.Spacer().Stretch().Clickable(new FrameHit(area));
+        // The left and right edges run between the top and bottom ones, which already have a corner's first Border.
+        const float side = CornerGrip - Border;
+        return B.Dock(B.Spacer(),
+            B.Top(B.HStack(Grip(HitTestResult.ResizeTopLeft).ColW(CornerGrip), Grip(HitTestResult.ResizeTop),
+                Grip(HitTestResult.ResizeTopRight).ColW(CornerGrip)), Border),
+            B.Bottom(B.HStack(Grip(HitTestResult.ResizeBottomLeft).ColW(CornerGrip), Grip(HitTestResult.ResizeBottom),
+                Grip(HitTestResult.ResizeBottomRight).ColW(CornerGrip)), Border),
+            B.Left(B.VStack(Grip(HitTestResult.ResizeTopLeft).RowH(side), Grip(HitTestResult.ResizeLeft),
+                Grip(HitTestResult.ResizeBottomLeft).RowH(side)), Border),
+            B.Right(B.VStack(Grip(HitTestResult.ResizeTopRight).RowH(side), Grip(HitTestResult.ResizeRight),
+                Grip(HitTestResult.ResizeBottomRight).RowH(side)), Border));
+    }
+
+    // The marks no IconKind names, each drawn in the rect its leaf was arranged into; the web view's leaf is the
+    // native view's to cover.
+    private void DrawFill(Layout.Content.Fill fill, RectF32 r)
+    {
+        var stroke = Math.Max(1, (int)MathF.Round(Scale.ToSurface(MarkStroke)));
+        switch (fill.Key)
         {
-            var reach = 1 - MathF.Abs(row + 0.5f - cy) / halfHeight;
-            if (reach > 0)
-                renderer.FillRectangle(Rect(x, row, width * reach, 1), Ink);
+            case CompactMark:
+                // A screen; in compact mode with the small picture filled, showing what is on.
+                // Compact on away from a video only outlines it: it waits for the next video.
+                Renderer.DrawRectangle(Pixels(r.X, r.Y, r.Width, r.Height), Ink, stroke);
+                var picture = Pixels(r.X + r.Width / 2, r.Y + r.Height / 2, r.Width * 0.42f, r.Height * 0.4f);
+                if (_painted is { Compact: true, Showing: true })
+                    Renderer.FillRectangle(picture, Accent);
+                else if (_painted.Compact)
+                    Renderer.DrawRectangle(picture, Accent, stroke);
+                break;
+            case PinMark:
+                // A dot: filled while the window stays on top.
+                if (_painted.OnTop)
+                    FillEllipse(r.X, r.Y, r.Width, r.Height, Accent);
+                else
+                    DrawEllipse(r.X, r.Y, r.Width, r.Height, Ink, stroke);
+                break;
+            case CloseMark:
+                DrawLine(r.X, r.Y, r.Right, r.Bottom, Ink, stroke);
+                DrawLine(r.X, r.Bottom, r.Right, r.Y, Ink, stroke);
+                break;
         }
     }
 
     // RectInt takes (LowerRight, UpperLeft).
-    private static RectInt Rect(float x, float y, float w, float h)
+    private static RectInt Pixels(float x, float y, float w, float h)
         => new(new PointInt((int)MathF.Round(x + w), (int)MathF.Round(y + h)), new PointInt((int)MathF.Round(x), (int)MathF.Round(y)));
 }

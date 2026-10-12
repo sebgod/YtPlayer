@@ -20,7 +20,6 @@ namespace YtPlayer;
 internal static class Program
 {
     private static readonly ConcurrentQueue<Action> UiQueue = new();
-    private static PipLayout _layout;
     private static HitTest? _hitTest; // held for as long as SDL may call it
     private const int SummonHotKey = 1; // Win+/
 
@@ -50,7 +49,7 @@ internal static class Program
         SetHint(Hints.MouseFocusClickthrough, "1");
         // Two sizes, each remembered: the picture in picture while a compact video shows, and a bigger
         // one to browse in. Unset, they are the logical defaults at the display's scale.
-        var startScale = GetDisplayContentScale(GetPrimaryDisplay()) is > 0 and var s ? s : 1f;
+        var startScale = new DesignScale(GetDisplayContentScale(GetPrimaryDisplay()) is > 0 and var s ? s : 1f);
         var pipSize = settings is { PipWidth: { } pw, PipHeight: { } ph }
             ? (pw, ph) : WindowFit.Scaled(WindowFit.PipDefault, startScale);
         var browseSize = settings is { BrowseWidth: { } bw, BrowseHeight: { } bh }
@@ -120,7 +119,7 @@ internal static class Program
             else
                 browseSize = (w, h);
             showing = on;
-            var browseMinimumWidth = WindowFit.Scaled(WindowFit.BrowseMinimum, window.DisplayScale).W;
+            var browseMinimumWidth = WindowFit.Scaled(WindowFit.BrowseMinimum, DisplayScale(window)).W;
             (var size, narrowPipWidth) = WindowFit.Switch(
                 on, w, (on ? pipSize : browseSize).Item2, browseMinimumWidth, narrowPipWidth);
             if (collapsed)
@@ -135,16 +134,31 @@ internal static class Program
         window.GetSizeInPixels(out var pixelW, out var pixelH);
         var context = VulkanContext.CreateForSharedDevice(app.Device, window.Surface, (uint)pixelW, (uint)pixelH);
         var renderer = new VkRenderer(context, (uint)pixelW, (uint)pixelH);
-        var chrome = new PipChrome(renderer, TitleFont());
-        _layout = CurrentLayout(window, collapsed);
+        // The strip and border: a layout tree in design units, which the display's scale maps to pixels. The scale
+        // is set again on every resize, as a window moved to another display is resized to its scale.
+        var chrome = new PipChrome<VulkanContext>(renderer) { FontPath = TitleFont() ?? "", DpiScale = window.DisplayScale };
 
-        _hitTest = (nint _, in Point area, nint _) => _layout.HitTest(area.X, area.Y);
+        // Window points are pixels on Windows and X11, the platforms with a web view backend, so SDL's hit test
+        // asks the regions the last paint drew what is at its point.
+        _hitTest = (nint _, in Point area, nint _) => chrome.FrameAreaAt(area.X, area.Y);
         SetWindowHitTest(window.Handle, _hitTest, nint.Zero);
 
         var web = NativeWebView.Create(new NativeWebViewOptions { UserDataFolder = PlayerSettings.WebProfileFolder });
         // The strip shows the page's title, and play or pause as the page's video does.
         string? stripTitle = null;
         var playing = false;
+        // The strip and border light up while the window is the active one (read in OnLoopIteration).
+        var active = false;
+        ChromeState State() => new(fullscreen ? PipMode.Fullscreen : collapsed ? PipMode.Collapsed : PipMode.Normal,
+            active, compact, showing, onTop, playing, stripTitle);
+        // The page goes where the chrome's tree puts it, in pixels. Collapsed, it is hidden, with nowhere to go.
+        void PlaceWebView()
+        {
+            if (collapsed)
+                return;
+            window.GetSizeInPixels(out var w, out var h);
+            web.SetBounds(chrome.WebViewBounds(State(), w, h));
+        }
         var adLog = new AdLog();
         // Not awaited: registered before the attach, it completes only after it, and the first
         // navigation waits for it anyway. Watched only so a refusal is not silent.
@@ -195,7 +209,7 @@ internal static class Program
         });
         web.PageError += error => Console.Error.WriteLine($"[page] {error}");
         web.AttachToWindow(window);
-        web.SetBounds(WebViewPixels(_layout, window));
+        PlaceWebView();
         web.Navigate(startUrl);
 
         // Ctrl+H: out of sight, off the taskbar and Alt+Tab too, the video playing on; Win+/ brings it back.
@@ -218,8 +232,7 @@ internal static class Program
                 return;
             fullscreen = on;
             SetWindowFullscreen(window.Handle, on);
-            _layout = CurrentLayout(window, collapsed, fullscreen);
-            web.SetBounds(WebViewPixels(_layout, window));
+            PlaceWebView();
             if (!on && showingAfterFullscreen is { } pending)
             {
                 showingAfterFullscreen = null;
@@ -255,8 +268,8 @@ internal static class Program
                 // Hidden rather than sized to nothing: an X11 window cannot be 0 pixels tall.
                 web.SetVisible(false);
                 var minimumWidth = WindowFit.Scaled(showing ? WindowFit.PipMinimum : WindowFit.BrowseMinimum,
-                    window.DisplayScale).W;
-                var collapsedHeight = PipLayout.CollapsedHeightAt(window.DisplayScale);
+                    DisplayScale(window)).W;
+                var collapsedHeight = chrome.CollapsedHeight();
                 window.SetMinimumSize(minimumWidth, collapsedHeight);
                 Place(window, current, (w, collapsedHeight));
             }
@@ -265,28 +278,16 @@ internal static class Program
                 Fit(window, current, expanded, showing);
                 web.SetVisible(true);
             }
-            _layout = CurrentLayout(window, collapsed, fullscreen);
-            if (!collapsed)
-                web.SetBounds(WebViewPixels(_layout, window));
+            PlaceWebView();
         }
 
         var loop = new SdlEventLoop(window, renderer)
         {
-            BackgroundColor = PipChrome.Background,
-            OnRender = () => chrome.Draw(_layout, new ChromeState(compact, showing, onTop, playing, stripTitle)),
+            BackgroundColor = PipChrome<VulkanContext>.Background,
             OnResize = (_, _) =>
             {
-                _layout = CurrentLayout(window, collapsed, fullscreen);
-                if (!collapsed)
-                    web.SetBounds(WebViewPixels(_layout, window));
-            },
-            OnMouseMove = (mx, my) =>
-            {
-                var hovered = _layout.ButtonAt(mx, my);
-                if (hovered == chrome.Hovered)
-                    return false;
-                chrome.Hovered = hovered;
-                return true;
+                chrome.DpiScale = window.DisplayScale;
+                PlaceWebView();
             },
             // Keys reach here only while the strip has focus (after a click on it); in the page, the
             // tweaks script handles the same shortcuts.
@@ -339,44 +340,50 @@ internal static class Program
                         return false;
                 }
             },
-            OnMouseDown = (button, mx, my, _, _) =>
+        };
+
+        // The strip's presses and hover go through DIR.Lib's router, which finds them in the regions the chrome
+        // painted. Only the left button presses one.
+        IPixelWidget[] widgets = [chrome];
+        var router = new InputRouter(chrome.Ui, new BackgroundTaskTracker(), loop.RequestRedraw) { Widgets = () => widgets };
+        loop.OnPointerInput = evt => evt is not InputEvent.MouseDown { Button: not MouseButton.Left } && router.Handle(evt);
+        loop.OnRender = () =>
+        {
+            chrome.Render(State());
+            router.AfterPaint();
+        };
+        chrome.Pressed = button =>
+        {
+            switch (button)
             {
-                if (button != 1)
-                    return false;
-                switch (_layout.ButtonAt(mx, my))
-                {
-                    case PipButton.Back:
-                        _ = web.ExecuteScriptAsync("history.back()");
-                        break;
-                    case PipButton.PlayPause:
-                        web.PostMessage("""{"togglePlay":true}""");
-                        break;
-                    case PipButton.Next:
-                        web.PostMessage("""{"next":true}""");
-                        break;
-                    case PipButton.Collapse:
-                        SetCollapsed(!collapsed);
-                        break;
-                    case PipButton.Compact:
-                        compact = !compact;
-                        web.PostMessage(CompactMessage(compact));
-                        break;
-                    case PipButton.Pin:
-                        onTop = !onTop;
-                        window.SetAlwaysOnTop(onTop);
-                        break;
-                    case PipButton.Close:
-                        PushQuit();
-                        return true;
-                    default:
-                        return false;
-                }
-                // A click on the strip leaves the keyboard on the strip; hand it back to the page, so
-                // the next key (space, Ctrl+F) reaches the video. Collapsed, there is no page to give it to.
-                if (!collapsed)
-                    web.Focus();
-                return true;
-            },
+                case PipButton.Back:
+                    _ = web.ExecuteScriptAsync("history.back()");
+                    break;
+                case PipButton.PlayPause:
+                    web.PostMessage("""{"togglePlay":true}""");
+                    break;
+                case PipButton.Next:
+                    web.PostMessage("""{"next":true}""");
+                    break;
+                case PipButton.Collapse:
+                    SetCollapsed(!collapsed);
+                    break;
+                case PipButton.Compact:
+                    compact = !compact;
+                    web.PostMessage(CompactMessage(compact));
+                    break;
+                case PipButton.Pin:
+                    onTop = !onTop;
+                    window.SetAlwaysOnTop(onTop);
+                    break;
+                case PipButton.Close:
+                    PushQuit();
+                    return;
+            }
+            // A click on the strip leaves the keyboard on the strip; hand it back to the page, so
+            // the next key (space, Ctrl+F) reaches the video. Collapsed, there is no page to give it to.
+            if (!collapsed)
+                web.Focus();
         };
         // Win+/, or a later launch: the player comes forward, hidden, minimized or behind others, with the keyboard
         // (the page's, unless it is folded to its strip). Activate (AppShell's) restores only a minimized window.
@@ -406,7 +413,6 @@ internal static class Program
 
         // The strip and border light up while the window is the active one, so it is plain when keys go
         // to it. Nothing signals a change, so it is read every iteration (at least every 16 ms).
-        var active = false;
         loop.OnLoopIteration = () =>
         {
             var any = false;
@@ -425,7 +431,6 @@ internal static class Program
             if (window.IsActive != active)
             {
                 active = !active;
-                loop.BackgroundColor = active ? PipChrome.ActiveBackground : PipChrome.Background;
                 // However the window was activated (a click on the strip or border, the taskbar,
                 // Alt+Tab), the keys are for the page, not the strip.
                 if (active && !collapsed)
@@ -536,7 +541,7 @@ internal static class Program
     {
         // Window coordinates are pixels on Windows and X11, the platforms with a web view backend, so
         // logical sizes scale by the display's scale.
-        var min = WindowFit.Scaled(pip ? WindowFit.PipMinimum : WindowFit.BrowseMinimum, window.DisplayScale);
+        var min = WindowFit.Scaled(pip ? WindowFit.PipMinimum : WindowFit.BrowseMinimum, DisplayScale(window));
         window.SetMinimumSize(min.W, min.H);
         Place(window, current, (Math.Max(size.W, min.W), Math.Max(size.H, min.H)));
     }
@@ -569,24 +574,8 @@ internal static class Program
         => arg.Equals("--start-minimised", StringComparison.OrdinalIgnoreCase)
            || arg.Equals("--start-minimized", StringComparison.OrdinalIgnoreCase);
 
-    private static PipLayout CurrentLayout(SdlVulkanWindow window, bool collapsed, bool fullscreen = false)
-    {
-        GetWindowSize(window.Handle, out var w, out var h);
-        return new PipLayout(w, h, collapsed, window.DisplayScale, fullscreen);
-    }
-
-    // The layout is in window points; the web view is placed in pixels.
-    private static RectInt WebViewPixels(PipLayout layout, SdlVulkanWindow window)
-    {
-        window.GetSizeInPixels(out var pw, out _);
-        var scale = layout.Width > 0 ? pw / (float)layout.Width : 1f;
-        var b = layout.WebView;
-        var x0 = (int)MathF.Round(b.X * scale);
-        var y0 = (int)MathF.Round(b.Y * scale);
-        var x1 = (int)MathF.Round((b.X + b.W) * scale);
-        var y1 = (int)MathF.Round((b.Y + b.H) * scale);
-        return new RectInt(new PointInt(x1, y1), new PointInt(x0, y0));
-    }
+    // The window's sizes are design units at the display's scale, as the chrome's are.
+    private static DesignScale DisplayScale(SdlVulkanWindow window) => new(window.DisplayScale);
 
     private static void PushQuit()
     {
