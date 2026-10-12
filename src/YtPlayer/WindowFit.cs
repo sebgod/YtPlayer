@@ -1,4 +1,9 @@
+using DIR.Lib;
+
 namespace YtPlayer;
+
+/// <summary>An integer rectangle in window points (SDL's window coordinates).</summary>
+internal readonly record struct Box(int X, int Y, int W, int H);
 
 /// <summary>
 /// The window has two sizes: small while a compact video shows (the picture in picture), and bigger
@@ -26,8 +31,8 @@ internal static class WindowFit
                 ? ((browseMinimumWidth, height), currentWidth)
                 : ((currentWidth, height), null);
 
-    public static (int W, int H) Scaled((int W, int H) logical, float scale)
-        => ((int)MathF.Round(logical.W * scale), (int)MathF.Round(logical.H * scale));
+    public static (int W, int H) Scaled((int W, int H) logical, DesignScale scale)
+        => ((int)MathF.Round(scale.ToSurfaceX(logical.W)), (int)MathF.Round(scale.ToSurfaceY(logical.H)));
 
     /// <summary>Where a window of <paramref name="size"/> goes in place of <paramref name="current"/>. The
     /// corner nearest the display's own corner stays put, so a PiP parked bottom right grows up and to the

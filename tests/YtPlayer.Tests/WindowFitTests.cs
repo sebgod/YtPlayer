@@ -1,3 +1,4 @@
+using DIR.Lib;
 using Shouldly;
 
 namespace YtPlayer.Tests;
@@ -58,7 +59,7 @@ public class WindowFitTests
 
     [Fact]
     public void ScalingRoundsToWholePixels()
-        => WindowFit.Scaled(WindowFit.BrowseMinimum, 1.5f).ShouldBe((840, 720));
+        => WindowFit.Scaled(WindowFit.BrowseMinimum, new DesignScale(1.5f)).ShouldBe((840, 720));
 
     [Fact]
     public void SecondMonitorCoordinatesWork()

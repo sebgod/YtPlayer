@@ -31,11 +31,11 @@ To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` 
 
 - **The strip along the top drags the window**; the thin border around it resizes, corners included.
   Double-click it to fold the window to the strip, and again to unfold it (Windows).
-- **Back** (`<`) goes back a page.
+- **Back** (◀) goes back a page.
 - **Play/pause** (beside it): ▶ while paused, ❚❚ while playing; it follows the video, media keys included.
 - **Next** (▶❘, beside that): the next video, a playlist's next or YouTube's autoplay pick.
 - **The title** of what is on, in the strip between the buttons.
-- **Collapse** (the chevron) folds the window to its strip, the video playing on; again unfolds it to the size it had.
+- **Collapse** (▲, ▼ while folded) folds the window to its strip, the video playing on; again unfolds it to the size it had.
   Ctrl+Up and Ctrl+Down do the same.
 - **Compact** (the screen icon) shows the video alone, filling the window, with YouTube's own controls.
   Turn it off to browse. It applies only on a video's page: anywhere else YouTube shows as usual, and
