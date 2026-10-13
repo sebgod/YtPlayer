@@ -18,16 +18,23 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   Ctrl+C, Ctrl+Shift+C, Ctrl+P, Ctrl+H, Ctrl+Up/Down, Ctrl+Q, Ctrl+L and Ctrl+V keys. Host and page talk through
   `chrome.webview` messages: `{ready}`, `{showing}`, `{paste}`, `{copy}`, `{skipAt}`, `{playing}`, `{hide}`,
   `{collapse}`, `{queueClipboard}`, `{media}` from the page (read by `PageMessage`), `{compact}`, `{search}`,
-  `{copyLink}`, `{togglePlay}`, `{next}`, `{queue}`, `{listQueue}`, `{mediaAction}` from the host.
+  `{copyLink}`, `{togglePlay}`, `{next}`, `{previous}`, `{home}`, `{queue}`, `{listQueue}`, `{mediaAction}` from the
+  host.
 - Windows' media controls (the flyout, the lock screen, the media keys) show the player's own entry, for its window
   (`SdlVulkanWindow.TryGetMediaControls`, SdlVulkan.Renderer 7.69), named after the app id `AppIdentity.Claim`
   (AppShell 1.2) sets at start, with the Start menu shortcut that carries it. WebView2's own entry is off
   (`NativeWebViewOptions.SystemMediaControls = false`): it was "Unknown app", from `msedgewebview2.exe`. The page
   sends the track as `{media}`, read from `#movie_player.getVideoData()` whenever YouTube touches the media session
   or the player's video starts (not from the session's metadata, which hover previews and ads set too); presses come
-  back as `{mediaAction}`, to the action handlers YouTube gave the session. To check it live, list the sessions
-  with Windows PowerShell 5.1 (`GlobalSystemMediaTransportControlsSessionManager`); quick settings opened by a
-  script (`ms-actioncenter:`) leaves the media panel out, so the flyout itself needs a person.
+  back as `{mediaAction}`, to the action handlers YouTube gave the session, but for previous, which is the strip's.
+  To check it live, list the sessions with Windows PowerShell 5.1 (`GlobalSystemMediaTransportControlsSessionManager`);
+  quick settings opened by a script (`ms-actioncenter:`) leaves the media panel out, so the flyout itself needs a
+  person.
+- The strip's previous goes back in a playlist, a mix or the queue when the player's `getPlaylistIndex()` is past
+  the first, and otherwise starts the video over. The player's own previous button is no guide (YouTube hides it in a
+  player as narrow as the window's), nor is the media session's previous (YouTube sets it for a whole mix, its first
+  video included, where it does nothing). Home clicks YouTube's logo, so the page goes there without a reload and a
+  video plays on in the background.
 - The queue is YouTube's own: the script adds with the `addToPlaylistCommand` its "Add to queue" sends, run through
   `ytd-app.resolveCommand`, and reads `yt-playlist-manager.getPlaylistData()`. Both are YouTube internals; the
   page check covers them.
@@ -45,7 +52,7 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
 - A double-click on the strip folds the window, as the collapse button does. SDL gives the app no click on a
   draggable area, so it comes from `SdlVulkanWindow.TryReportCaptionDoubleClicks` (Windows only).
 - `tools/page-check.mjs` drives that script in a headless Edge against live YouTube (search, compact,
-  the keys, paste, miniplayer, the media session, and when YouTube serves one, a real ad's Skip clicked as the host clicks it) with a stub for the host. Run it after touching the script; YouTube's markup
+  the keys, paste, miniplayer, the media session, next, previous and home, and when YouTube serves one, a real ad's Skip clicked as the host clicks it) with a stub for the host. Run it after touching the script; YouTube's markup
   moves under it.
 - `WindowFit.cs`: the window's two sizes (PiP while compact is on screen, browse otherwise) and what size a
   switch gives it, in design units. The window does the rest (SdlVulkan.Renderer 7.68): `ToWindowSize` turns

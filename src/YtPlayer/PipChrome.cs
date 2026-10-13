@@ -5,7 +5,7 @@ using Layout = DIR.Lib.Layout;
 
 namespace YtPlayer;
 
-public enum PipButton { Back, PlayPause, Next, Collapse, Compact, Pin, Close }
+public enum PipButton { Back, Home, Previous, PlayPause, Next, Collapse, Compact, Pin, Close }
 
 /// <summary>How the window shows the page.</summary>
 internal enum PipMode
@@ -38,8 +38,9 @@ internal readonly record struct ChromeState(PipMode Mode, bool Active, bool Comp
 internal sealed record FrameHit(HitTestResult Area) : HitResult;
 
 /// <summary>
-/// Everything the window shows besides the page: the strip along the top (back, play/pause, next, the title,
-/// collapse, compact, stay on top, close) and the border around the page, as one <see cref="Layout.Node"/> tree.
+/// Everything the window shows besides the page: the strip along the top (back and home, then previous,
+/// play/pause and next, the title, collapse, compact, stay on top, close) and the border around the page, as one
+/// <see cref="Layout.Node"/> tree.
 /// Its sizes are design units, which the measure context maps to pixels at <see cref="PixelWidgetBase{TSurface}.DpiScale"/>
 /// (the display's, which the host sets). The painter draws the tree and binds each button's press to the rect it
 /// drew it in; the router reads those regions for the clicks and the hover, SDL's hit test asks them what drags
@@ -66,6 +67,8 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
     private const float StripHeight = 28;
     private const float Border = 4;
     private const float ButtonWidth = 34;
+    // Between the page's buttons (back, home) and the video's (previous, play/pause, next).
+    private const float GroupGap = 6;
     // How far from a corner, along either edge, a resize takes the corner.
     private const float CornerGrip = 14;
     private const float MarkSize = 10;
@@ -77,6 +80,8 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
 
     // The Fill leaves: the page's web view, and the marks no IconKind names, which DrawFill draws.
     private const string WebViewKey = "web";
+    private const string BackMark = "back";
+    private const string HomeMark = "home";
     private const string CompactMark = "compact";
     private const string PinMark = "pin";
     private const string CloseMark = "close";
@@ -144,7 +149,14 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
     // The buttons and the title. All of it drags but the buttons.
     private Layout.Node Strip(ChromeState state)
         => B.HStack(
-                Button(PipButton.Back, B.Icon(Layout.IconKind.CaretLeft, MarkSize, Ink)),
+                // The page's, in strokes. Back is a browser's arrow, not a triangle, which beside play would read as
+                // play's reverse.
+                Button(PipButton.Back, B.Fill(MarkSize, MarkSize, BackMark)),
+                Button(PipButton.Home, B.Fill(MarkSize, MarkSize, HomeMark)),
+                B.Spacer().ColW(GroupGap),
+                // The video's: filled. The previous video, next's mirror: a bar against a triangle.
+                Button(PipButton.Previous,
+                    B.HStack(B.Box(2.25f, 8, Ink), B.Icon(Layout.IconKind.CaretLeft, 8, Ink)).WithGap(0.5f)),
                 // What a press does: two bars while playing, a triangle while paused.
                 Button(PipButton.PlayPause, state.Playing
                     ? B.HStack(B.Box(2.75f, MarkSize, Ink), B.Box(2.75f, MarkSize, Ink)).WithGap(2.5f)
@@ -170,7 +182,7 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
             .BgHover(button == PipButton.Close ? CloseHover : Hover)
             .Clickable(new HitResult.ButtonHit(button.ToString()), _ => Pressed?.Invoke(button));
 
-    // The page's title, cut to an ellipsis to fit, between the three buttons on the left and the four on the right
+    // The page's title, cut to an ellipsis to fit, between the five buttons on the left and the four on the right
     // (whose room it keeps when there is none).
     private Layout.Node Title(string? title)
         => B.HStack(string.IsNullOrWhiteSpace(title) || FontPath.Length == 0
@@ -204,6 +216,32 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
         var stroke = Math.Max(1, (int)MathF.Round(Scale.ToSurface(MarkStroke)));
         switch (fill.Key)
         {
+            case BackMark:
+            {
+                // An arrow pointing back: a shaft, and the head's two strokes from its tip.
+                var middle = r.Y + r.Height / 2;
+                var head = r.Height / 2;
+                DrawLine(r.X, middle, r.Right, middle, Ink, stroke);
+                DrawLine(r.X, middle, r.X + head, r.Y, Ink, stroke);
+                DrawLine(r.X, middle, r.X + head, r.Bottom, Ink, stroke);
+                break;
+            }
+            case HomeMark:
+            {
+                // A house: a roof over two walls and the floor between them. Five strokes in the space the others
+                // draw two in, so thinner, or at 100% they run together.
+                var line = Math.Max(1, (int)MathF.Round(Scale.ToSurface(MarkStroke * 0.8f)));
+                var eaves = r.Y + r.Height * 0.5f;
+                var left = r.X + r.Width * 0.16f;
+                var right = r.Right - r.Width * 0.16f;
+                var walls = eaves - r.Height * 0.12f;
+                DrawLine(r.X, eaves, r.X + r.Width / 2, r.Y, Ink, line);
+                DrawLine(r.X + r.Width / 2, r.Y, r.Right, eaves, Ink, line);
+                Renderer.FillRectangle(Pixels(left, walls, line, r.Bottom - walls), Ink);
+                Renderer.FillRectangle(Pixels(right - line, walls, line, r.Bottom - walls), Ink);
+                Renderer.FillRectangle(Pixels(left, r.Bottom - line, right - left, line), Ink);
+                break;
+            }
             case CompactMark:
                 // A screen; in compact mode with the small picture filled, showing what is on.
                 // Compact on away from a video only outlines it: it waits for the next video.

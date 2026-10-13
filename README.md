@@ -33,7 +33,9 @@ To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` 
 
 - **The strip along the top drags the window**; the thin border around it resizes, corners included.
   Double-click it to fold the window to the strip, and again to unfold it (Windows).
-- **Back** (◀) goes back a page.
+- **Back** (←) goes back a page, and **Home** (⌂, beside it) to YouTube's home. A video playing plays on in the
+  background, as it does when you leave it any other way.
+- **Previous** (❘◀): the previous video in a playlist, a mix or the queue; anywhere else, the video from its start.
 - **Play/pause** (beside it): ▶ while paused, ❚❚ while playing; it follows the video, media keys included.
 - **Next** (▶❘, beside that): the next video, a playlist's next or YouTube's autoplay pick.
 - **The title** of what is on, in the strip between the buttons.
@@ -50,7 +52,7 @@ To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` 
 The taskbar icon turns red, with an equalizer in its little picture, while the video plays.
 
 Windows' **media controls** (in quick settings, beside the volume when it changes, and on the lock screen) show the
-video as YtPlayer's: its title, channel and picture, with play/pause, next, and previous in a playlist or mix
+video as YtPlayer's: its title, channel and picture, with play/pause, previous and next, which do what the strip's do
 (Windows).
 
 The **queue** is YouTube's own, the one its "Add to queue" fills, so the next button and autoplay follow it. Like
@@ -78,6 +80,7 @@ and remembers each size, as you last left it, between runs; so are its position 
 | **Ctrl+P** | play/pause, from anywhere in the window, the search box included |
 | **Ctrl+Up** / **Ctrl+Down** | fold the window to its strip / unfold it |
 | **Shift+N** | the next video (YouTube's own key; on the folded strip too) |
+| **Shift+P** | the previous video in a playlist (YouTube's own key); on the folded strip, what the previous button does |
 | **Ctrl+Q** | queues the video under the pointer (a thumbnail), or else the one whose link is on the clipboard |
 | **Ctrl+L** | lists the queue (or the mix or playlist that plays); click an entry to play it, Esc closes the list |
 | **F** | YouTube's fullscreen, which fills the screen; Esc or F again leaves it |

@@ -132,7 +132,7 @@ check('togglePlay again resumes it', s.video?.paused === false && s.posted.some(
 const media = await evaluate(`({ sent: window.__media ?? null, title: document.getElementById('movie_player')?.getVideoData?.().title ?? null })`);
 check("media: the page reports the player's video", !!media.sent?.title && media.sent.title === media.title, media);
 check('media: with its picture, as JPEG', /^https:\/\/i\.ytimg\.com\/vi\/[\w-]{11}\/hqdefault\.jpg$/.test(media.sent?.artwork ?? ''), media.sent);
-console.log(`.... media: YouTube offers previous ${media.sent?.previous}`);
+check('media: previous and next always offered, as the strip has them', media.sent?.previous === true && media.sent?.next === true, media.sent);
 await evaluate(`navigator.mediaSession.metadata = new MediaMetadata({ title: 'A hover preview', artist: 'Someone else' })`); await sleep(200);
 const afterPreview = await evaluate(`window.__media?.title ?? null`);
 check("media: a hover preview's metadata does not replace the track", afterPreview === media.sent?.title, { afterPreview, track: media.sent?.title });
@@ -142,6 +142,20 @@ check("media: the host's pause pauses the player", s.video?.paused === true && s
 await evaluate(`window.__posted.length = 0; window.__host({ mediaAction: 'play' })`); await sleep(800);
 s = await state();
 check("media: the host's play resumes it", s.video?.paused === false && s.posted.some(m => m.playing === true), { video: s.video, posted: s.posted });
+
+// The strip's previous button, and Windows' previous: with no previous video (a search result opens as the first of a
+// mix, where YouTube's own previous does nothing), the video starts over.
+const playlistIndex = `document.getElementById('movie_player')?.getPlaylistIndex?.() ?? -1`;
+const currentId = `new URLSearchParams(location.search).get('v')`;
+if (!(await evaluate(playlistIndex) > 0)) {
+  const id = await evaluate(currentId);
+  for (const [how, message] of [['the strip\'s previous', { previous: true }], ["Windows' previous", { mediaAction: 'previoustrack' }]]) {
+    await evaluate(`document.querySelector('#movie_player video').currentTime = 40`); await sleep(1500);
+    await evaluate(`window.__host(${JSON.stringify(message)})`); await sleep(1000);
+    s = await state();
+    check(`previous: with none, ${how} starts the video over`, s.video && s.video.t < 5 && await evaluate(currentId) === id, { video: s.video, id });
+  }
+} else console.log('.... previous: YouTube offers a previous video here; starting over is not checked');
 
 // And Ctrl+P plays and pauses from anywhere in the window, the search box included, instead of printing.
 await evaluate(`window.__posted.length = 0`);
@@ -276,6 +290,11 @@ check('queue: Escape closes the list', !(await evaluate(`!!document.getElementBy
 await press('l', 'KeyL', 76, 2); await sleep(400);
 await evaluate(`[...document.querySelectorAll('#ytpip-queue .ytpip-q')].find(b => /zoo/i.test(b.textContent))?.click()`); await sleep(5000);
 check('queue: a click on an entry plays it', await evaluate(`new URLSearchParams(location.search).get('v')`) === 'jNQXAC9IVRw', await evaluate('location.search'));
+// In the queue there is a previous video, and the strip's previous plays it.
+ids = JSON.parse(await evaluate(queueIds));
+const queuedBefore = ids[ids.indexOf('jNQXAC9IVRw') - 1];
+await evaluate(`window.__host({ previous: true })`); await sleep(5000);
+check('previous: in the queue, the entry before plays', !!queuedBefore && await evaluate(currentId) === queuedBefore, { queuedBefore, now: await evaluate(currentId), ids });
 await evaluate(`window.__host({ compact: false })`); await sleep(3000);
 const tile = JSON.parse(await evaluate(`(() => {
   const t = [...document.querySelectorAll('yt-lockup-view-model, ytd-compact-video-renderer')].find(e => e.querySelector('a[href*="watch?v="]') && e.getBoundingClientRect().height > 20);
@@ -296,6 +315,16 @@ await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 3, y: 3 });
 await press('q', 'KeyQ', 81, 2); await sleep(300);
 s = await state();
 check('queue: Ctrl+Q over no video asks the host for the clipboard\'s', s.posted.some(m => m.queueClipboard === true), s.posted);
+
+// 10. The strip's home button, from a compact video: YouTube's home, within the page, so the video plays on in the
+// background, and the window takes its browse size.
+await evaluate(`window.__host({ compact: true })`); await sleep(2000);
+await evaluate(`window.__posted.length = 0; window.__samePage = true; window.__host({ home: true })`); await sleep(4000);
+s = await state();
+const samePage = await evaluate(`window.__samePage === true`);
+check('home: YouTube\'s home, within the page', s.path === '/' && !s.compact && samePage, { path: s.path, compact: s.compact, samePage });
+check('home: the video plays on', s.video && !s.video.paused, { video: s.video, mini: s.mini });
+check('home: the window takes its browse size (showing:false)', s.posted.some(m => m.showing === false), s.posted);
 
 ws.close(); proc.kill();
 console.log(failures ? `${failures} FAILED` : 'ALL PASSED');
