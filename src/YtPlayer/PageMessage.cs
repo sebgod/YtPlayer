@@ -10,10 +10,13 @@ namespace YtPlayer;
 /// <c>playing</c> (whether the player's video plays, for the strip's play/pause button), <c>ad</c> (an ad
 /// started or ended, for the log), <c>hide</c> (Ctrl+H: hide the window), <c>collapse</c> (Ctrl+Up folds the
 /// window to its strip, Ctrl+Down unfolds it), <c>queueClipboard</c> (Ctrl+Q with no video under the pointer:
-/// queue the one whose link is on the clipboard).</summary>
+/// queue the one whose link is on the clipboard), <c>media</c> (the track YouTube gave the page's media session,
+/// for the window's entry in the system's media controls, or null when it took it away: read as
+/// <see cref="MediaGone"/>).</summary>
 internal readonly record struct PageMessage(
     bool Ready, bool? Showing, string? Paste, string? Copy = null, (double X, double Y)? SkipAt = null,
-    bool? Playing = null, bool? Ad = null, bool Hide = false, bool? Collapse = null, bool QueueClipboard = false)
+    bool? Playing = null, bool? Ad = null, bool Hide = false, bool? Collapse = null, bool QueueClipboard = false,
+    PageTrack? Media = null, bool MediaGone = false)
 {
     /// <summary>Reads <paramref name="json"/>; anything that is not one of ours reads as empty.</summary>
     public static PageMessage Parse(string json)
@@ -46,11 +49,29 @@ internal readonly record struct PageMessage(
                 Collapse: root.TryGetProperty("collapse", out var fold) && fold.ValueKind is JsonValueKind.True or JsonValueKind.False
                     ? fold.GetBoolean()
                     : null,
-                QueueClipboard: root.TryGetProperty("queueClipboard", out var q) && q.ValueKind == JsonValueKind.True);
+                QueueClipboard: root.TryGetProperty("queueClipboard", out var q) && q.ValueKind == JsonValueKind.True,
+                Media: root.TryGetProperty("media", out var m) ? PageTrack.From(m) : null,
+                MediaGone: root.TryGetProperty("media", out var gone) && gone.ValueKind == JsonValueKind.Null);
         }
         catch (JsonException)
         {
             return default; // not ours
         }
     }
+}
+
+/// <summary>A track as YouTube describes it to the page's media session: its title, the channel (as the artist), a
+/// picture of it (a URL), and whether YouTube offers the previous and next ones.</summary>
+internal sealed record PageTrack(string Title, string Artist, string? Artwork, bool Previous, bool Next)
+{
+    public static PageTrack? From(JsonElement e)
+        => e.ValueKind == JsonValueKind.Object
+           && e.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String
+           && title.GetString() is { Length: > 0 } t
+            ? new PageTrack(t,
+                e.TryGetProperty("artist", out var a) && a.ValueKind == JsonValueKind.String ? a.GetString()! : "",
+                e.TryGetProperty("artwork", out var art) && art.ValueKind == JsonValueKind.String ? art.GetString() : null,
+                e.TryGetProperty("previous", out var p) && p.ValueKind == JsonValueKind.True,
+                e.TryGetProperty("next", out var n) && n.ValueKind == JsonValueKind.True)
+            : null;
 }

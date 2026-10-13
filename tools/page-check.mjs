@@ -52,7 +52,8 @@ await send('Page.enable');
 await send('Runtime.enable');
 const stub = `window.__posted = []; window.__hostListeners = [];
   window.chrome = window.chrome || {};
-  window.chrome.webview = { postMessage: m => window.__posted.push(m), addEventListener: (t, f) => window.__hostListeners.push(f) };
+  window.chrome.webview = { postMessage: m => { window.__posted.push(m); if ('media' in m) window.__media = m.media; },
+    addEventListener: (t, f) => window.__hostListeners.push(f) };
   window.__host = d => window.__hostListeners.forEach(f => f({ data: d }));`;
 await send('Page.addScriptToEvaluateOnNewDocument', { source: stub });
 await send('Page.addScriptToEvaluateOnNewDocument', { source: readFileSync(tweaksPath, 'utf8') });
@@ -124,6 +125,23 @@ check('togglePlay pauses the player and reports playing:false', s.video?.paused 
 await evaluate(`window.__posted.length = 0; window.__host({ togglePlay: true })`); await sleep(800);
 s = await state();
 check('togglePlay again resumes it', s.video?.paused === false && s.posted.some(m => m.playing === true), { video: s.video, posted: s.posted });
+
+// 3b. The window's media controls (Windows' media flyout, the media keys): the page gives the host the player's
+// video as the track, and the host's presses come back to YouTube's handlers. YouTube's hover previews set the media
+// session's metadata too (seen on a results page), so a stand-in for one checks that the track stays the player's.
+const media = await evaluate(`({ sent: window.__media ?? null, title: document.getElementById('movie_player')?.getVideoData?.().title ?? null })`);
+check("media: the page reports the player's video", !!media.sent?.title && media.sent.title === media.title, media);
+check('media: with its picture, as JPEG', /^https:\/\/i\.ytimg\.com\/vi\/[\w-]{11}\/hqdefault\.jpg$/.test(media.sent?.artwork ?? ''), media.sent);
+console.log(`.... media: YouTube offers previous ${media.sent?.previous}`);
+await evaluate(`navigator.mediaSession.metadata = new MediaMetadata({ title: 'A hover preview', artist: 'Someone else' })`); await sleep(200);
+const afterPreview = await evaluate(`window.__media?.title ?? null`);
+check("media: a hover preview's metadata does not replace the track", afterPreview === media.sent?.title, { afterPreview, track: media.sent?.title });
+await evaluate(`window.__posted.length = 0; window.__host({ mediaAction: 'pause' })`); await sleep(600);
+s = await state();
+check("media: the host's pause pauses the player", s.video?.paused === true && s.posted.some(m => m.playing === false), { video: s.video, posted: s.posted });
+await evaluate(`window.__posted.length = 0; window.__host({ mediaAction: 'play' })`); await sleep(800);
+s = await state();
+check("media: the host's play resumes it", s.video?.paused === false && s.posted.some(m => m.playing === true), { video: s.video, posted: s.posted });
 
 // And Ctrl+P plays and pauses from anywhere in the window, the search box included, instead of printing.
 await evaluate(`window.__posted.length = 0`);

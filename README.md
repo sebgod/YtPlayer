@@ -23,6 +23,8 @@ Windows builds are on the [releases page](https://github.com/sebgod/YtPlayer/rel
 PCs, `win-arm64` for ARM ones (Snapdragon). Unzip anywhere and run `ytplayer.exe`; it is a native exe,
 no .NET needed. It needs the Edge WebView2 Runtime, which Windows 10 and 11 already have, and a Vulkan
 driver. The exe is not signed, so SmartScreen may ask before the first run ("More info", then "Run anyway").
+The first run puts YtPlayer in the Start menu (a shortcut, which is also how Windows knows the player's name); move
+the folder later and the next run moves the shortcut with it.
 
 To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` in the Startup folder
 (Win+R, `shell:startup`): it starts out of sight, and Win+/ brings it up, as does starting it again from the Start menu.
@@ -46,6 +48,10 @@ To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` 
 - **Close** (`×`).
 
 The taskbar icon turns red, with an equalizer in its little picture, while the video plays.
+
+Windows' **media controls** (in quick settings, beside the volume when it changes, and on the lock screen) show the
+video as YtPlayer's: its title, channel and picture, with play/pause, next, and previous in a playlist or mix
+(Windows).
 
 The **queue** is YouTube's own, the one its "Add to queue" fills, so the next button and autoplay follow it. Like
 YouTube's, it lasts while the page does: opening a link with Ctrl+V or from the command line starts a new page
@@ -75,7 +81,7 @@ and remembers each size, as you last left it, between runs; so are its position 
 | **Ctrl+Q** | queues the video under the pointer (a thumbnail), or else the one whose link is on the clipboard |
 | **Ctrl+L** | lists the queue (or the mix or playlist that plays); click an entry to play it, Esc closes the list |
 | **F** | YouTube's fullscreen, which fills the screen; Esc or F again leaves it |
-| media keys, headset button | play/pause, as with YouTube in a browser |
+| media keys, headset button | play/pause, next and previous, as with YouTube in a browser |
 
 ## Signing in, and what is hidden
 
