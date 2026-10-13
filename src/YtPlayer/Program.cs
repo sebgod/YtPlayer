@@ -22,6 +22,7 @@ internal static class Program
     private static readonly ConcurrentQueue<Action> UiQueue = new();
     private static HitTest? _hitTest; // held for as long as SDL may call it
     private const int SummonHotKey = 1; // Win+/
+    private const string AppId = "sebgod.YtPlayer"; // the app id Windows knows the player by
 
     [STAThread] // WebView2 requires an STA thread
     private static int Main(string[] args)
@@ -38,6 +39,12 @@ internal static class Program
         using var gate = InstanceGate.TryClaim(channel);
         if (gate is null && (startHidden || InstanceGate.TryHandOff(channel, input ?? "", TimeSpan.FromSeconds(2))))
             return 0;
+        // Before the first window, which takes the process's app id when it is made: Windows names the player's
+        // media session (and its taskbar button) after the Start menu shortcut that carries the same id, written here
+        // the first time (Windows only; AppShell's).
+        var shortcut = AppIdentity.Claim(AppId, "YtPlayer");
+        if (shortcut is not (StartMenuShortcut.Present or StartMenuShortcut.None))
+            PlayerLog.Write($"the Start menu shortcut: {shortcut}");
         var startUrl = YouTubeUrl.ToStartUrl(input);
         // A video asked for on the command line opens compact; otherwise the last mode is kept.
         var compact = YouTubeUrl.TryGetVideoId(input ?? "", out _, out _) || (input is null && settings.Compact);
@@ -142,7 +149,16 @@ internal static class Program
         _hitTest = (nint _, in Point area, nint _) => chrome.FrameAreaAt(area.X, area.Y);
         SetWindowHitTest(window.Handle, _hitTest, nint.Zero);
 
-        var web = NativeWebView.Create(new NativeWebViewOptions { UserDataFolder = PlayerSettings.WebProfileFolder });
+        // The window's entry in the system's media controls (Windows' media flyout, the lock screen, the media keys),
+        // under the player's name: the track the page's media session has, play or pause as the video does, and the
+        // presses back to the page. WebView2 would put the page's media there too, as "Unknown app", so it is told not
+        // to while the window has its own (Windows only for now).
+        var media = window.TryGetMediaControls();
+        var web = NativeWebView.Create(new NativeWebViewOptions
+        {
+            UserDataFolder = PlayerSettings.WebProfileFolder,
+            SystemMediaControls = media is null,
+        });
         // The strip shows the page's title, and play or pause as the page's video does.
         string? stripTitle = null;
         var playing = false;
@@ -193,7 +209,15 @@ internal static class Program
                 playing = p;
                 if ((p ? playingIcon : idleIcon) is { } icon)
                     window.SetIcon(icon);
+                media?.SetPlaying(p);
             }
+            if (message.Media is { } track)
+            {
+                media?.SetTrack(track.Title, track.Artist, track.Artwork);
+                media?.SetSkipEnabled(track.Previous, track.Next);
+            }
+            if (message.MediaGone)
+                media?.Clear();
             if (message.Hide)
                 Hide();
             if (message.Collapse is { } fold)
@@ -450,6 +474,11 @@ internal static class Program
         if (window.TryReportCaptionDoubleClicks())
             loop.OnCaptionDoubleClick = () => SetCollapsed(!collapsed);
 
+        // The media flyout's buttons and the media keys: the page does what the browser would have done with them,
+        // YouTube's own handlers first.
+        if (media is not null)
+            loop.OnMediaButton = button => web.PostMessage(MediaActionMessage(button));
+
         loop.Run();
 
         // Fullscreen, the window's place and size are the display's; the ones to remember are those it goes back to.
@@ -510,6 +539,16 @@ internal static class Program
     }
 
     private static string CompactMessage(bool compact) => compact ? """{"compact":true}""" : """{"compact":false}""";
+
+    // A press of the media controls, as the media session action the browser would have sent the page.
+    internal static string MediaActionMessage(MediaButton button) => button switch
+    {
+        MediaButton.Play => """{"mediaAction":"play"}""",
+        MediaButton.Pause => """{"mediaAction":"pause"}""",
+        MediaButton.Stop => """{"mediaAction":"stop"}""",
+        MediaButton.Next => """{"mediaAction":"nexttrack"}""",
+        _ => """{"mediaAction":"previoustrack"}""",
+    };
 
     private static string TitleFor(string pageTitle)
     {

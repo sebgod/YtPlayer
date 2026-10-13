@@ -452,17 +452,78 @@
         else toast('Point at a video, or copy its link, to queue it');
       }
       if (d && d.listQueue) showQueueList(false);
+      if (d && d.mediaAction) mediaAction(d.mediaAction);
     });
   } catch (e) { /* no host bridge */ }
   // Whether the player's video plays, for the strip's play/pause button. Media events do not bubble, but
   // a capturing listener on the document still sees them; a hover preview's video is not the player's.
   function reportPlaying(e) {
     var v = e.target;
-    if (v && v.tagName === 'VIDEO' && v.closest('#movie_player')) post({ playing: !v.paused && !v.ended });
+    if (!v || v.tagName !== 'VIDEO' || !v.closest('#movie_player')) return;
+    post({ playing: !v.paused && !v.ended });
+    // A new video in the player says so here too, should YouTube set the session's metadata before the player's.
+    reportMedia();
   }
   ['playing', 'pause', 'ended', 'emptied'].forEach(function (type) {
     document.addEventListener(type, reportPlaying, true);
   });
+
+  // Windows' media controls (the flyout, the lock screen, the media keys) are the host's, for its window and under
+  // its name; the browser's own are off. The track goes to the host as {media} (null while the player has no
+  // video), each time it changes, and the host's presses come back as {mediaAction}, to the handlers YouTube gave
+  // the browser's media session, as the browser would have sent them.
+  // The track is the player's own video, read from the player. YouTube's media session is only the cue to look:
+  // a hover preview and an ad set its metadata too, and neither is what plays.
+  var mediaHandlers = {};
+  var mediaSent;
+  function reportMedia() {
+    var player = document.getElementById('movie_player');
+    var data = null;
+    try {
+      data = player && player.getVideoData ? player.getVideoData() : null;
+    } catch (e) { /* not YouTube's player API after all */ }
+    var media = data && data.title && data.video_id ? {
+      title: data.title, artist: data.author || '',
+      // The video's own picture, which every video has, as JPEG: Windows may have no WebP decoder.
+      artwork: 'https://i.ytimg.com/vi/' + data.video_id + '/hqdefault.jpg',
+      // Previous only where YouTube has one (a playlist, a mix); next always, as the strip's next button.
+      previous: !!mediaHandlers.previoustrack, next: true
+    } : null;
+    var json = JSON.stringify(media);
+    if (json === mediaSent) return;
+    mediaSent = json;
+    post({ media: media });
+  }
+  try {
+    var session = MediaSession.prototype;
+    var metadata = Object.getOwnPropertyDescriptor(session, 'metadata');
+    Object.defineProperty(session, 'metadata', {
+      configurable: true, enumerable: metadata.enumerable, get: metadata.get,
+      set: function (value) { metadata.set.call(this, value); reportMedia(); }
+    });
+    var setActionHandler = session.setActionHandler;
+    session.setActionHandler = function (action, handler) {
+      setActionHandler.call(this, action, handler); // throws for an action the browser does not know, as before
+      mediaHandlers[action] = handler || null;
+      reportMedia();
+    };
+  } catch (e) { /* no media session in this browser */ }
+  function mediaAction(action) {
+    var handler = mediaHandlers[action];
+    if (handler) {
+      try { handler({ action: action }); } catch (e) { /* YouTube's own */ }
+      return;
+    }
+    // An action YouTube left to the browser: the player's video plays or pauses; next is the strip's next.
+    if (action === 'nexttrack') {
+      playNext();
+      return;
+    }
+    var v = document.querySelector('#movie_player video');
+    if (!v) return;
+    if (action === 'play') v.play();
+    else if (action === 'pause' || action === 'stop') v.pause();
+  }
   document.addEventListener('DOMContentLoaded', function () { post({ ready: true }); });
   document.addEventListener('yt-navigate-finish', function () {
     searching = false;

@@ -1,3 +1,4 @@
+using SdlVulkan.Renderer;
 using Shouldly;
 
 namespace YtPlayer.Tests;
@@ -55,6 +56,38 @@ public class PageMessageTests
     [InlineData("""{"ad":false}""", false)]
     public void AdSaysWhenAnAdStartsAndEnds(string json, bool ad) => PageMessage.Parse(json).Ad.ShouldBe(ad);
 
+    [Fact]
+    public void MediaCarriesTheTrack()
+        => PageMessage.Parse("""
+            {"media":{"title":"Big Buck Bunny","artist":"Blender","artwork":"https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg","previous":false,"next":true}}
+            """).Media.ShouldBe(new PageTrack("Big Buck Bunny", "Blender", "https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg", false, true));
+
+    [Fact]
+    public void MediaWithoutArtworkOrArtistStillCarriesTheTitle()
+        => PageMessage.Parse("""{"media":{"title":"Big Buck Bunny","artwork":null}}""").Media
+            .ShouldBe(new PageTrack("Big Buck Bunny", "", null, false, false));
+
+    [Fact]
+    public void MediaNullTakesTheTrackAway()
+    {
+        var message = PageMessage.Parse("""{"media":null}""");
+        message.MediaGone.ShouldBeTrue();
+        message.Media.ShouldBeNull();
+    }
+
+    [Fact]
+    public void AnythingElseLeavesTheTrack()
+        => PageMessage.Parse("""{"playing":true}""").ShouldBe(new PageMessage(false, null, null, Playing: true));
+
+    [Theory]
+    [InlineData(MediaButton.Play, "play")]
+    [InlineData(MediaButton.Pause, "pause")]
+    [InlineData(MediaButton.Stop, "stop")]
+    [InlineData(MediaButton.Next, "nexttrack")]
+    [InlineData(MediaButton.Previous, "previoustrack")]
+    public void APressGoesToThePageAsTheBrowsersAction(MediaButton button, string action)
+        => Program.MediaActionMessage(button).ShouldBe($$"""{"mediaAction":"{{action}}"}""");
+
     [Theory]
     [InlineData("not json")]
     [InlineData("\"a string\"")]
@@ -62,5 +95,7 @@ public class PageMessageTests
     [InlineData("""{"showing":"yes","paste":42,"copy":false}""")]
     [InlineData("""{"skipAt":{"x":"1","y":2}}""")]
     [InlineData("""{"skipAt":[1,2]}""")]
+    [InlineData("""{"media":{"title":""}}""")]
+    [InlineData("""{"media":"a track"}""")]
     public void AnythingElseReadsAsEmpty(string json) => PageMessage.Parse(json).ShouldBe(default);
 }
