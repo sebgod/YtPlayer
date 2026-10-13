@@ -129,7 +129,7 @@ public class PipChromeTests
     public void CollapsedThereIsNoWebView() => Collapsed.WebViewBounds(Folded, 480, 32).ShouldBe(default);
 
     [Fact]
-    public void CollapsedTheWindowIsTheStripAndTheBorderUnderIt() => Collapsed.CollapsedHeight().ShouldBe(32);
+    public void CollapsedTheWindowIsTheStripAndTheBorderUnderIt() => Collapsed.CollapsedHeight().ShouldBe(32f);
 
     [Theory]
     [InlineData(200, 14, HitTestResult.Draggable)]
@@ -151,7 +151,7 @@ public class PipChromeTests
         Scaled.HitTest(670, 7).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Close)));
         Scaled.HitTest(668, 20).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Pin)));
         Scaled.HitTest(669, 20).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Close))); // 720 - 51
-        Scaled.CollapsedHeight().ShouldBe(48);
+        Scaled.CollapsedHeight().ShouldBe(32f); // design units: the window scales it to its own coordinates
     }
 
     [Theory]
