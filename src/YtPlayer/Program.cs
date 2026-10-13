@@ -352,9 +352,13 @@ internal static class Program
                         web.Focus();
                         web.PostMessage("""{"listQueue":true}""");
                         return true;
-                    // YouTube's own key for the next video, which the page takes itself; the strip passes it on.
+                    // YouTube's own keys for the next and previous videos, which the page takes itself; on the strip
+                    // they do what its buttons do.
                     case (InputModifier.Shift, InputKey.N):
                         web.PostMessage("""{"next":true}""");
+                        return true;
+                    case (InputModifier.Shift, InputKey.P):
+                        web.PostMessage("""{"previous":true}""");
                         return true;
                     default:
                         return false;
@@ -378,6 +382,12 @@ internal static class Program
             {
                 case PipButton.Back:
                     _ = web.ExecuteScriptAsync("history.back()");
+                    break;
+                case PipButton.Home:
+                    web.PostMessage("""{"home":true}""");
+                    break;
+                case PipButton.Previous:
+                    web.PostMessage("""{"previous":true}""");
                     break;
                 case PipButton.PlayPause:
                     web.PostMessage("""{"togglePlay":true}""");

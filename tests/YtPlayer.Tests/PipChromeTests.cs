@@ -46,8 +46,10 @@ public class PipChromeTests
 
     [Theory]
     [InlineData(17, 14, PipButton.Back)]
-    [InlineData(50, 14, PipButton.PlayPause)]
-    [InlineData(85, 14, PipButton.Next)]
+    [InlineData(51, 14, PipButton.Home)]
+    [InlineData(91, 14, PipButton.Previous)] // past the 6 between the page's buttons and the video's
+    [InlineData(125, 14, PipButton.PlayPause)]
+    [InlineData(159, 14, PipButton.Next)]
     [InlineData(360, 14, PipButton.Collapse)]
     [InlineData(400, 14, PipButton.Compact)]
     [InlineData(430, 14, PipButton.Pin)]
@@ -57,6 +59,7 @@ public class PipChromeTests
 
     [Theory]
     [InlineData(200, 14)] // the strip between the buttons
+    [InlineData(71, 14)] // between home and previous
     [InlineData(465, 100)] // the page, under the close button
     public void NoButtonIsElsewhere(float x, float y)
         => Chrome.HitTest(x, y).ShouldNotBeOfType<HitResult.ButtonHit>();
@@ -64,7 +67,7 @@ public class PipChromeTests
     [Fact]
     public void AButtonIsNotADragHandle()
     {
-        foreach (var x in new[] { 17, 50, 85, 360, 400, 430, 465 })
+        foreach (var x in new[] { 17, 51, 91, 125, 159, 360, 400, 430, 465 })
             Chrome.FrameAreaAt(x, 14).ShouldBe(HitTestResult.Normal);
     }
 
@@ -108,18 +111,33 @@ public class PipChromeTests
         var arranged = Layout.Engine.Arrange(chrome.Build(Plain with { Title = "A video" }),
             new Rect<float>(0, 0, 480, 300), new UnitContext());
         var title = arranged.Single(n => n.Node is Layout.Node.Leaf { Content: Layout.Content.Text });
-        title.Bounds.ShouldBe(new Rect<float>(108, 0, 230, 28)); // 102 + 6 to 344 - 6
+        title.Bounds.ShouldBe(new Rect<float>(182, 0, 156, 28)); // 176 + 6 to 344 - 6
     }
 
     [Fact]
     public void ATitleWithNoRoomIsLeftOut()
     {
-        var chrome = new PipChrome<RgbaImage>(new RgbaImageRenderer(260, 200)) { FontPath = "any" };
-        // 260 less seven buttons of 34 and the padding leaves 10, under the 24 a title needs.
-        Layout.Engine.Arrange(chrome.Build(Plain with { Title = "A video" }), new Rect<float>(0, 0, 260, 200),
+        var chrome = new PipChrome<RgbaImage>(new RgbaImageRenderer(340, 200)) { FontPath = "any" };
+        // 340 less nine buttons of 34, the 6 between them and the padding leaves 16, under the 24 a title needs.
+        Layout.Engine.Arrange(chrome.Build(Plain with { Title = "A video" }), new Rect<float>(0, 0, 340, 200),
                 new UnitContext())
             .Any(n => n.Node is Layout.Node.Leaf { Content: Layout.Content.Text })
             .ShouldBeFalse();
+    }
+
+    [Fact]
+    public void TheNarrowestWindowHasRoomForEveryButton()
+    {
+        var width = WindowFit.PipMinimum.W;
+        var chrome = Painted(width, WindowFit.PipMinimum.H, Plain);
+        // Five from the left, the 6 after the second; four from the right.
+        float[] left = [17, 51, 91, 125, 159];
+        float[] right = [width - 136 + 17, width - 102 + 17, width - 68 + 17, width - 17];
+        var at = left.Concat(right).ToArray();
+        var buttons = Enum.GetValues<PipButton>();
+        at.Length.ShouldBe(buttons.Length);
+        for (var i = 0; i < buttons.Length; i++)
+            chrome.HitTest(at[i], 14).ShouldBe(new HitResult.ButtonHit(buttons[i].ToString()), $"at {at[i]}");
     }
 
     private static readonly ChromeState Folded = Plain with { Mode = PipMode.Collapsed };

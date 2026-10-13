@@ -306,6 +306,30 @@
       if (player && player.nextVideo) player.nextVideo();
     } catch (e) { /* not YouTube's player API after all */ }
   }
+  // The strip's previous button (and Shift+P on the folded strip, and Windows' previous): the previous video where
+  // there is one (in a playlist, a mix or the queue, past its first), and where there is none, the video from its
+  // start. The player's playlist index says which: the player's own previous button is hidden in a player as narrow as
+  // the window's, and the media session's previous is set for a whole mix, its first video included, where it does
+  // nothing.
+  function playPrevious() {
+    var player = document.getElementById('movie_player');
+    try {
+      if (player && player.getPlaylistIndex && player.getPlaylistIndex() > 0) {
+        player.previousVideo();
+        return;
+      }
+    } catch (e) { /* not YouTube's player API after all */ }
+    var v = document.querySelector('#movie_player video');
+    if (v) v.currentTime = 0;
+  }
+
+  // The strip's home button: YouTube's home, the way its logo goes there, within the page, so a video plays on in
+  // the background as it does when leaving it by any other link. Away from YouTube (a sign-in page), a load of it.
+  function goHome() {
+    var logo = location.hostname === 'www.youtube.com' && document.querySelector('ytd-topbar-logo-renderer a#logo');
+    if (logo) logo.click();
+    else location.assign('https://www.youtube.com/');
+  }
 
   // The queue is YouTube's own, the one its "Add to queue" fills, kept by its playlist manager while the page
   // lasts (a full reload drops it). Ctrl+Q adds the video under the pointer (a thumbnail in a list), or with
@@ -446,6 +470,8 @@
       // From a key (the strip's Ctrl+P) it says what it did; from the strip's button, which shows it, not.
       if (d && d.togglePlay) togglePlay(d.togglePlay === 'key');
       if (d && d.next) playNext();
+      if (d && d.previous) playPrevious();
+      if (d && d.home) goHome();
       // The strip's Ctrl+Q: the video whose link was on the clipboard, or null when there was none.
       if (d && 'queue' in d) {
         if (d.queue) queueVideo(d.queue, '');
@@ -486,8 +512,8 @@
       title: data.title, artist: data.author || '',
       // The video's own picture, which every video has, as JPEG: Windows may have no WebP decoder.
       artwork: 'https://i.ytimg.com/vi/' + data.video_id + '/hqdefault.jpg',
-      // Previous only where YouTube has one (a playlist, a mix); next always, as the strip's next button.
-      previous: !!mediaHandlers.previoustrack, next: true
+      // Both always, as the strip's buttons: previous starts the video over where YouTube has no previous video.
+      previous: true, next: true
     } : null;
     var json = JSON.stringify(media);
     if (json === mediaSent) return;
@@ -509,6 +535,11 @@
     };
   } catch (e) { /* no media session in this browser */ }
   function mediaAction(action) {
+    // Previous is the strip's previous, which goes to YouTube's where it shows one.
+    if (action === 'previoustrack') {
+      playPrevious();
+      return;
+    }
     var handler = mediaHandlers[action];
     if (handler) {
       try { handler({ action: action }); } catch (e) { /* YouTube's own */ }
