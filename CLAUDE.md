@@ -38,9 +38,10 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
 - `tools/page-check.mjs` drives that script in a headless Edge against live YouTube (search, compact,
   the keys, paste, miniplayer, and when YouTube serves one, a real ad's Skip clicked as the host clicks it) with a stub for the host. Run it after touching the script; YouTube's markup
   moves under it.
-- `WindowFit.cs`: the window's two sizes (PiP while compact is on screen, browse otherwise) and where a
-  switch puts it. Design units at the display's scale (`DesignScale`): window coordinates are pixels on Windows
-  and X11.
+- `WindowFit.cs`: the window's two sizes (PiP while compact is on screen, browse otherwise) and what size a
+  switch gives it, in design units. The window does the rest (SdlVulkan.Renderer 7.68): `ToWindowSize` turns
+  design units into its coordinates, and `ResizeInPlace` resizes it keeping the corner nearest the display's
+  corner, inside the display's usable area.
 - The icon is drawn by `tools/make-icon.py` into `Assets/` (the .ico is the exe's ApplicationIcon, which
   SDL uses on Windows; the raw RGBA is the X11 window icon). While the video plays the window takes the playing
   icon (`ytplayer-playing-64.rgba`: the screen red, an equalizer in the panel). Change the script, not the files.

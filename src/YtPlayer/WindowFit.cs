@@ -1,15 +1,11 @@
-using DIR.Lib;
-
 namespace YtPlayer;
-
-/// <summary>An integer rectangle in window points (SDL's window coordinates).</summary>
-internal readonly record struct Box(int X, int Y, int W, int H);
 
 /// <summary>
 /// The window has two sizes: small while a compact video shows (the picture in picture), and bigger
-/// for browsing, where YouTube's page needs room for its masthead, search and titles. This is where
-/// a switch between them puts the window. Sizes in logical units (1 = 96 dpi) are scaled by the
-/// window's content scale; everything else is in window coordinates.
+/// for browsing, where YouTube's page needs room for its masthead, search and titles. This is what
+/// size a switch between them gives the window; the window resizes in place to it
+/// (SdlVulkanWindow.ResizeInPlace). The sizes here are design units (1 = 96 dpi), which the window turns
+/// into its coordinates (SdlVulkanWindow.ToWindowSize); Switch works in window coordinates.
 /// </summary>
 internal static class WindowFit
 {
@@ -30,23 +26,4 @@ internal static class WindowFit
             : currentWidth < browseMinimumWidth
                 ? ((browseMinimumWidth, height), currentWidth)
                 : ((currentWidth, height), null);
-
-    public static (int W, int H) Scaled((int W, int H) logical, DesignScale scale)
-        => ((int)MathF.Round(scale.ToSurfaceX(logical.W)), (int)MathF.Round(scale.ToSurfaceY(logical.H)));
-
-    /// <summary>Where a window of <paramref name="size"/> goes in place of <paramref name="current"/>. The
-    /// corner nearest the display's own corner stays put, so a PiP parked bottom right grows up and to the
-    /// left; the result is kept inside <paramref name="usable"/> (the display less its taskbar).</summary>
-    public static Box Place(Box current, (int W, int H) size, Box usable)
-    {
-        var w = Math.Min(size.W, usable.W);
-        var h = Math.Min(size.H, usable.H);
-        var anchorRight = current.X + current.W / 2 > usable.X + usable.W / 2;
-        var anchorBottom = current.Y + current.H / 2 > usable.Y + usable.H / 2;
-        var x = anchorRight ? current.X + current.W - w : current.X;
-        var y = anchorBottom ? current.Y + current.H - h : current.Y;
-        x = Math.Clamp(x, usable.X, usable.X + usable.W - w);
-        y = Math.Clamp(y, usable.Y, usable.Y + usable.H - h);
-        return new Box(x, y, w, h);
-    }
 }

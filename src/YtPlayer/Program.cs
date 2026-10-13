@@ -47,24 +47,24 @@ internal static class Program
         // SDL drops the click that activates a window by default, so on an inactive window the first
         // click on a strip button (close, back) only activated it. A floating player should act at once.
         SetHint(Hints.MouseFocusClickthrough, "1");
-        // Two sizes, each remembered: the picture in picture while a compact video shows, and a bigger
-        // one to browse in. Unset, they are the logical defaults at the display's scale.
-        var startScale = new DesignScale(GetDisplayContentScale(GetPrimaryDisplay()) is > 0 and var s ? s : 1f);
-        var pipSize = settings is { PipWidth: { } pw, PipHeight: { } ph }
-            ? (pw, ph) : WindowFit.Scaled(WindowFit.PipDefault, startScale);
-        var browseSize = settings is { BrowseWidth: { } bw, BrowseHeight: { } bh }
-            ? (bw, bh) : WindowFit.Scaled(WindowFit.BrowseDefault, startScale);
         // Compact shows from the start only for a video asked for on the command line. Anything else
         // opens a page to browse; from then on the page says when compact comes on screen or leaves it.
         var showing = compact && YouTubeUrl.TryGetVideoId(input ?? "", out _, out _);
-        var startSize = showing ? pipSize : browseSize;
+        // Two sizes, each remembered: the picture in picture while a compact video shows, and a bigger
+        // one to browse in. Unset, they are the design defaults at the scale of the display the window is on,
+        // which only the window knows: it opens at the default unscaled, and is sized once it is placed.
+        (int W, int H)? pipSaved = settings is { PipWidth: { } pw, PipHeight: { } ph } ? (pw, ph) : null;
+        (int W, int H)? browseSaved = settings is { BrowseWidth: { } bw, BrowseHeight: { } bh } ? (bw, bh) : null;
+        var opening = (showing ? pipSaved : browseSaved) ?? (showing ? WindowFit.PipDefault : WindowFit.BrowseDefault);
 
-        var window = app.CreateWindow("YtPlayer", startSize.Item1, startSize.Item2,
+        var window = app.CreateWindow("YtPlayer", opening.W, opening.H,
             maximized: false, borderless: true, alwaysOnTop: onTop, hidden: startHidden);
         if (settings is { X: { } x, Y: { } y })
             window.SetPosition(x, y);
-        window.GetPosition(out var startX, out var startY);
-        Fit(window, new Box(startX, startY, startSize.Item1, startSize.Item2), startSize, showing);
+        var pipSize = pipSaved ?? InWindow(window, WindowFit.PipDefault);
+        var browseSize = browseSaved ?? InWindow(window, WindowFit.BrowseDefault);
+        var startSize = showing ? pipSize : browseSize;
+        Fit(window, startSize, showing);
         // The strip is a caption to Windows (the hit test says so), and a double-click on a caption
         // maximizes: a picture-in-picture window has no use for that. The double-click folds it instead.
         // The choice holds when SDL rebuilds the style (a restore from minimized; 7.67): before, Win+D and back
@@ -119,7 +119,7 @@ internal static class Program
             else
                 browseSize = (w, h);
             showing = on;
-            var browseMinimumWidth = WindowFit.Scaled(WindowFit.BrowseMinimum, DisplayScale(window)).W;
+            var browseMinimumWidth = InWindow(window, WindowFit.BrowseMinimum).W;
             (var size, narrowPipWidth) = WindowFit.Switch(
                 on, w, (on ? pipSize : browseSize).Item2, browseMinimumWidth, narrowPipWidth);
             if (collapsed)
@@ -127,8 +127,7 @@ internal static class Program
                 expanded = size;
                 return;
             }
-            window.GetPosition(out var wx, out var wy);
-            Fit(window, new Box(wx, wy, w, h), size, on);
+            Fit(window, size, on);
         }
 
         window.GetSizeInPixels(out var pixelW, out var pixelH);
@@ -259,23 +258,20 @@ internal static class Program
             if (on == collapsed || fullscreen)
                 return;
             GetWindowSize(window.Handle, out var w, out var h);
-            window.GetPosition(out var wx, out var wy);
-            var current = new Box(wx, wy, w, h);
             collapsed = on;
             if (on)
             {
                 expanded = (w, h);
                 // Hidden rather than sized to nothing: an X11 window cannot be 0 pixels tall.
                 web.SetVisible(false);
-                var minimumWidth = WindowFit.Scaled(showing ? WindowFit.PipMinimum : WindowFit.BrowseMinimum,
-                    DisplayScale(window)).W;
-                var collapsedHeight = chrome.CollapsedHeight();
-                window.SetMinimumSize(minimumWidth, collapsedHeight);
-                Place(window, current, (w, collapsedHeight));
+                // The mode's minimum width, and the strip with the border under it, both in design units.
+                var (minimumWidth, collapsedHeight) = window.ToWindowSize(
+                    (showing ? WindowFit.PipMinimum : WindowFit.BrowseMinimum).W, chrome.CollapsedHeight());
+                window.ResizeInPlace(w, collapsedHeight, minimumWidth, collapsedHeight);
             }
             else
             {
-                Fit(window, current, expanded, showing);
+                Fit(window, expanded, showing);
                 web.SetVisible(true);
             }
             PlaceWebView();
@@ -537,25 +533,16 @@ internal static class Program
     }
 
     // Sets the mode's minimum, then sizes and places the window in place of current, on its display.
-    private static void Fit(SdlVulkanWindow window, Box current, (int W, int H) size, bool pip)
+    // Sizes the window where it stands on its display (SdlVulkanWindow.ResizeInPlace), never under the mode's minimum.
+    private static void Fit(SdlVulkanWindow window, (int W, int H) size, bool pip)
     {
-        // Window coordinates are pixels on Windows and X11, the platforms with a web view backend, so
-        // logical sizes scale by the display's scale.
-        var min = WindowFit.Scaled(pip ? WindowFit.PipMinimum : WindowFit.BrowseMinimum, DisplayScale(window));
-        window.SetMinimumSize(min.W, min.H);
-        Place(window, current, (Math.Max(size.W, min.W), Math.Max(size.H, min.H)));
+        var min = InWindow(window, pip ? WindowFit.PipMinimum : WindowFit.BrowseMinimum);
+        window.ResizeInPlace(size.W, size.H, min.W, min.H);
     }
 
-    // Sizes and places the window in place of current, on its display (WindowFit.Place).
-    private static void Place(SdlVulkanWindow window, Box current, (int W, int H) size)
-    {
-        var usable = window.TryGetUsableDisplayBounds(out var ux, out var uy, out var uw, out var uh)
-            ? new Box(ux, uy, uw, uh)
-            : current with { W = int.MaxValue / 4, H = int.MaxValue / 4 };
-        var placed = WindowFit.Place(current, size, usable);
-        window.SetSize(placed.W, placed.H);
-        window.SetPosition(placed.X, placed.Y);
-    }
+    // One of WindowFit's sizes, which are design units, in the window's coordinates.
+    private static (int W, int H) InWindow(SdlVulkanWindow window, (int W, int H) design)
+        => window.ToWindowSize(design.W, design.H);
 
     // A 64x64 window icon from the build's resources (tools/make-icon.py draws them). Windows takes the
     // window's first icon from the exe's (ApplicationIcon), at every size it needs; X11 has only what the
@@ -574,8 +561,6 @@ internal static class Program
         => arg.Equals("--start-minimised", StringComparison.OrdinalIgnoreCase)
            || arg.Equals("--start-minimized", StringComparison.OrdinalIgnoreCase);
 
-    // The window's sizes are design units at the display's scale, as the chrome's are.
-    private static DesignScale DisplayScale(SdlVulkanWindow window) => new(window.DisplayScale);
 
     private static void PushQuit()
     {

@@ -107,10 +107,11 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
         return default;
     }
 
-    /// <summary>How tall the window is collapsed, in pixels: the strip and the border under it, measured.</summary>
-    public int CollapsedHeight()
-        => (int)MathF.Round(MeasureLayout(Build(default(ChromeState) with { Mode = PipMode.Collapsed }),
-            new Layout.Size<float>(Renderer.Width, float.MaxValue)).Height);
+    /// <summary>How tall the window is collapsed, in design units: the strip and the border under it, measured.
+    /// The window turns it into its own coordinates (SdlVulkanWindow.ToWindowSize).</summary>
+    public float CollapsedHeight()
+        => MeasureLayout(Build(default(ChromeState) with { Mode = PipMode.Collapsed }),
+            new Layout.Size<float>(Scale.ToDesignX(Renderer.Width), float.MaxValue), scale: DesignScale.One).Height;
 
     /// <summary>What SDL's hit test answers at (x, y) in pixels: what the last paint put there. The strip drags,
     /// the border resizes, and a button or the page is the window's own.</summary>
