@@ -27,6 +27,10 @@ internal static class Program
     [STAThread] // WebView2 requires an STA thread
     private static int Main(string[] args)
     {
+        // A windowed app has no console to die on: whatever takes the player down goes to its log first, with
+        // the stack, and a task's exception nobody awaited is logged too rather than lost.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => PlayerLog.Write($"crash: {e.ExceptionObject}");
+        TaskScheduler.UnobservedTaskException += (_, e) => PlayerLog.Write($"unobserved: {e.Exception.GetBaseException()}");
         var settings = PlayerSettings.Load();
         // --start-minimised: start out of sight, as Ctrl+H leaves the window, for Win+/ to bring up (a login item).
         var startHidden = args.Any(IsStartMinimised);
