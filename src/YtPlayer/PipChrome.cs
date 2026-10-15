@@ -5,7 +5,7 @@ using Layout = DIR.Lib.Layout;
 
 namespace YtPlayer;
 
-public enum PipButton { Back, Home, Previous, PlayPause, Next, Collapse, Compact, Pin, Close }
+public enum PipButton { Back, Home, Previous, PlayPause, Next, Collapse, Compact, Pin, Hide, Fullscreen, Close }
 
 /// <summary>How the window shows the page.</summary>
 internal enum PipMode
@@ -39,8 +39,8 @@ internal sealed record FrameHit(HitTestResult Area) : HitResult;
 
 /// <summary>
 /// Everything the window shows besides the page: the strip along the top (back and home, then previous,
-/// play/pause and next, the title, collapse, compact, stay on top, close) and the border around the page, as one
-/// <see cref="Layout.Node"/> tree.
+/// play/pause and next, the title, collapse, compact, stay on top, hide, fullscreen, close) and the border around
+/// the page, as one <see cref="Layout.Node"/> tree.
 /// Its sizes are design units, which the measure context maps to pixels at <see cref="PixelWidgetBase{TSurface}.DpiScale"/>
 /// (the display's, which the host sets). The painter draws the tree and binds each button's press to the rect it
 /// drew it in; the router reads those regions for the clicks and the hover, SDL's hit test asks them what drags
@@ -66,7 +66,8 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
     // Design units, mapped to pixels by the measure context.
     private const float StripHeight = 28;
     private const float Border = 4;
-    private const float ButtonWidth = 34;
+    // Eleven of them and the gap between the groups fit the narrowest window (WindowFit.PipMinimum).
+    private const float ButtonWidth = 28;
     // Between the page's buttons (back, home) and the video's (previous, play/pause, next).
     private const float GroupGap = 6;
     // How far from a corner, along either edge, a resize takes the corner.
@@ -84,6 +85,8 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
     private const string HomeMark = "home";
     private const string CompactMark = "compact";
     private const string PinMark = "pin";
+    private const string HideMark = "hide";
+    private const string FullscreenMark = "fullscreen";
     private const string CloseMark = "close";
 
     // What the last Render showed, for the marks DrawFill draws.
@@ -91,6 +94,10 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
 
     /// <summary>What a press on a strip button does; the host's.</summary>
     public Action<PipButton>? Pressed { get; set; }
+
+    /// <summary>Whether the strip has a fullscreen button: where the host can put the page fullscreen from it and
+    /// the window follows (WebView2's). Without it, hide sits beside close.</summary>
+    public bool CanFullscreen { get; init; } = true;
 
     /// <summary>Paints the tree over the whole surface, binding the presses to where it drew.</summary>
     public void Render(ChromeState state)
@@ -148,7 +155,7 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
 
     // The buttons and the title. All of it drags but the buttons.
     private Layout.Node Strip(ChromeState state)
-        => B.HStack(
+        => B.HStack([
                 // The page's, in strokes. Back is a browser's arrow, not a triangle, which beside play would read as
                 // play's reverse.
                 Button(PipButton.Back, B.Fill(MarkSize, MarkSize, BackMark)),
@@ -170,7 +177,11 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
                     state.Mode == PipMode.Collapsed ? Layout.IconKind.CaretDown : Layout.IconKind.CaretUp, 8, Ink)),
                 Button(PipButton.Compact, B.Fill(13, MarkSize, CompactMark)),
                 Button(PipButton.Pin, B.Fill(8, 8, PinMark)),
-                Button(PipButton.Close, B.Fill(MarkSize, MarkSize, CloseMark)))
+                Button(PipButton.Hide, B.Fill(MarkSize, MarkSize, HideMark)),
+                .. CanFullscreen
+                    ? new[] { Button(PipButton.Fullscreen, B.Fill(MarkSize, MarkSize, FullscreenMark)) }
+                    : [],
+                Button(PipButton.Close, B.Fill(MarkSize, MarkSize, CloseMark))])
             .RowH(StripHeight)
             .Clickable(new FrameHit(HitTestResult.Draggable));
 
@@ -182,7 +193,7 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
             .BgHover(button == PipButton.Close ? CloseHover : Hover)
             .Clickable(new HitResult.ButtonHit(button.ToString()), _ => Pressed?.Invoke(button));
 
-    // The page's title, cut to an ellipsis to fit, between the five buttons on the left and the four on the right
+    // The page's title, cut to an ellipsis to fit, between the five buttons on the left and the six on the right
     // (whose room it keeps when there is none).
     private Layout.Node Title(string? title)
         => B.HStack(string.IsNullOrWhiteSpace(title) || FontPath.Length == 0
@@ -259,6 +270,31 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
                 else
                     DrawEllipse(r.X, r.Y, r.Width, r.Height, Ink, stroke);
                 break;
+            case FullscreenMark:
+            {
+                // YouTube's own: a screen's four corners. A square, Windows' maximize between minimize and close,
+                // promised what does not happen (the page goes fullscreen, the window does not maximize) and looked
+                // like compact's screen beside it.
+                var arm = r.Width * 0.38f;
+                void Corner(float x, float y, bool right, bool bottom)
+                {
+                    Renderer.FillRectangle(Pixels(right ? x - arm : x, bottom ? y - stroke : y, arm, stroke), Ink);
+                    Renderer.FillRectangle(Pixels(right ? x - stroke : x, bottom ? y - arm : y, stroke, arm), Ink);
+                }
+                Corner(r.X, r.Y, right: false, bottom: false);
+                Corner(r.Right, r.Y, right: true, bottom: false);
+                Corner(r.X, r.Bottom, right: false, bottom: true);
+                Corner(r.Right, r.Bottom, right: true, bottom: true);
+                break;
+            }
+            case HideMark:
+            {
+                // A bar, as Windows draws minimize beside close: out of the way. A crossed-out eye ran together at
+                // 100%, and an arrow down onto a line read as a download.
+                var middle = r.Y + r.Height / 2;
+                DrawLine(r.X, middle, r.Right, middle, Ink, stroke);
+                break;
+            }
             case CloseMark:
                 DrawLine(r.X, r.Y, r.Right, r.Bottom, Ink, stroke);
                 DrawLine(r.X, r.Bottom, r.Right, r.Y, Ink, stroke);

@@ -126,6 +126,22 @@ await evaluate(`window.__posted.length = 0; window.__host({ togglePlay: true })`
 s = await state();
 check('togglePlay again resumes it', s.video?.paused === false && s.posted.some(m => m.playing === true), { video: s.video, posted: s.posted });
 
+// 3a'. The strip's fullscreen button: the host dispatches ytpip-fullscreen through the DevTools protocol as the user's
+// gesture, and the page clicks YouTube's own button. Without the gesture (all a posted message could do) the page may
+// not go fullscreen. First past the 5 s an earlier trusted input's activation lasts.
+const fullscreenElement = () => evaluate(`document.fullscreenElement?.tagName ?? null`);
+await sleep(5500);
+await evaluate(`window.dispatchEvent(new Event('ytpip-fullscreen'))`); await sleep(1500);
+const ungestured = await fullscreenElement();
+check('fullscreen: not without the gesture', ungestured === null, ungestured);
+await send('Runtime.evaluate', { expression: `window.dispatchEvent(new Event('ytpip-fullscreen'))`, userGesture: true });
+await sleep(1500);
+const full = await fullscreenElement();
+check("fullscreen: the strip's button puts the page fullscreen", full !== null, full);
+await evaluate(`document.exitFullscreen().then(() => true, () => false)`); await sleep(1000);
+const left = await fullscreenElement();
+check('fullscreen: and it leaves', left === null, left);
+
 // 3b. The window's media controls (Windows' media flyout, the media keys): the page gives the host the player's
 // video as the track, and the host's presses come back to YouTube's handlers. YouTube's hover previews set the media
 // session's metadata too (seen on a results page), so a stand-in for one checks that the track stays the player's.

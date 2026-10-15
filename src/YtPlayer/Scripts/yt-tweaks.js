@@ -458,6 +458,14 @@
     if (text) post({ paste: text });
   }, true);
 
+  // The strip's fullscreen button: YouTube's own fullscreen, as its button gives it. The host dispatches this event
+  // through the DevTools protocol as the user's gesture, which a page may go fullscreen on; a posted message is not one.
+  window.addEventListener('ytpip-fullscreen', function () {
+    var button = isWatchPage() && document.querySelector('#movie_player .ytp-fullscreen-button');
+    if (button) button.click();
+    else toast('Open a video to watch it fullscreen');
+  });
+
   function post(msg) {
     try { window.chrome.webview.postMessage(msg); } catch (e) { /* no host bridge */ }
   }

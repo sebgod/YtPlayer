@@ -39,7 +39,7 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   `ytd-app.resolveCommand`, and reads `yt-playlist-manager.getPlaylistData()`. Both are YouTube internals; the
   page check covers them.
 - Win+/ is a global hotkey (`SdlVulkanWindow.TryRegisterGlobalHotKey`, Windows only): it shows the window if
-  hidden, raises it and gives it the keyboard. Ctrl+H and `--start-minimised` hide it (`SdlVulkanWindow.Hide`,
+  hidden, raises it and gives it the keyboard. Ctrl+H, the strip's hide button and `--start-minimised` hide it (`SdlVulkanWindow.Hide`,
   off the taskbar too), but only while Win+/ is ours to bring it back; otherwise they minimize it.
 - One player: `InstanceGate` (SharpAstro.AppShell, which comes with SdlVulkan.Renderer) is claimed at start; a
   later launch hands its arguments to the running player and exits before it has a window (`--start-minimised`
@@ -48,11 +48,14 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   resizing inside that handler; `PipMode.Fullscreen` is the page with no strip or border. To test it, use
   YouTube's own fullscreen (its F, or its button), which makes the document element fullscreen. Asking for
   fullscreen on `#movie_player` directly is not what YouTube does: YouTube moves that element when the view
-  grows, and the page drops out of fullscreen.
+  grows, and the page drops out of fullscreen. The strip's fullscreen button (`PipChrome.CanFullscreen`, Windows
+  only) dispatches `ytpip-fullscreen` in the page through the DevTools protocol (`Runtime.evaluate` with
+  `userGesture`), on which the page script clicks YouTube's own button: a page goes fullscreen only on the user's
+  gesture, and a posted message is none.
 - A double-click on the strip folds the window, as the collapse button does. SDL gives the app no click on a
   draggable area, so it comes from `SdlVulkanWindow.TryReportCaptionDoubleClicks` (Windows only).
 - `tools/page-check.mjs` drives that script in a headless Edge against live YouTube (search, compact,
-  the keys, paste, miniplayer, the media session, next, previous and home, and when YouTube serves one, a real ad's Skip clicked as the host clicks it) with a stub for the host. Run it after touching the script; YouTube's markup
+  the keys, paste, miniplayer, the media session, next, previous and home, the strip's fullscreen, and when YouTube serves one, a real ad's Skip clicked as the host clicks it) with a stub for the host. Run it after touching the script; YouTube's markup
   moves under it.
 - `WindowFit.cs`: the window's two sizes (PiP while compact is on screen, browse otherwise) and what size a
   switch gives it, in design units. The window does the rest (SdlVulkan.Renderer 7.68): `ToWindowSize` turns

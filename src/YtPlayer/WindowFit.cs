@@ -9,7 +9,7 @@ namespace YtPlayer;
 /// </summary>
 internal static class WindowFit
 {
-    // As wide as the strip's nine buttons, which a narrower window would cut off on the right.
+    // As wide as the strip's eleven buttons, which a narrower window would cut off on the right.
     public static readonly (int W, int H) PipMinimum = (320, 170);
     // About 16:9 for the video once the strip and border are taken off; 360x230 was too small to watch.
     public static readonly (int W, int H) PipDefault = (480, 300);
