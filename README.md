@@ -47,7 +47,11 @@ To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` 
   while it shows). A video given on the command line opens compact. Leaving a video lets it play on in
   the background; turning compact on brings it back.
 - **Stay on top** (the dot): red while the window floats above others.
-- **Close** (`×`).
+- **Hide** (`—`) takes the window out of sight, off the taskbar and Alt+Tab too, the video playing on, as Ctrl+H
+  does. Win+/ brings it back, and so does starting YtPlayer again. If another app holds Win+/, it only minimizes.
+- **Fullscreen** (the four corners) is YouTube's fullscreen, as its own button or F gives it, on a video's page
+  (Windows).
+- **Close** (`×`) quits.
 
 The taskbar icon turns red, with an equalizer in its little picture, while the video plays.
 
@@ -59,7 +63,7 @@ The **queue** is YouTube's own, the one its "Add to queue" fills, so the next bu
 YouTube's, it lasts while the page does: opening a link with Ctrl+V or from the command line starts a new page
 without it.
 
-YouTube's **fullscreen** (F, its button, a double-click on the video) fills the screen, not just the window
+YouTube's **fullscreen** (F, its button, a double-click on the video, the strip's) fills the screen, not just the window
 (Windows); Esc or F again puts the window back where it was.
 
 The buttons act on the first click even while another window is active. While the window is active its strip

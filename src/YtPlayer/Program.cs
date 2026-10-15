@@ -27,6 +27,10 @@ internal static class Program
     [STAThread] // WebView2 requires an STA thread
     private static int Main(string[] args)
     {
+        // A windowed app has no console to die on: whatever takes the player down goes to its log first, with
+        // the stack, and a task's exception nobody awaited is logged too rather than lost.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => PlayerLog.Write($"crash: {e.ExceptionObject}");
+        TaskScheduler.UnobservedTaskException += (_, e) => PlayerLog.Write($"unobserved: {e.Exception.GetBaseException()}");
         var settings = PlayerSettings.Load();
         // --start-minimised: start out of sight, as Ctrl+H leaves the window, for Win+/ to bring up (a login item).
         var startHidden = args.Any(IsStartMinimised);
@@ -142,7 +146,12 @@ internal static class Program
         var renderer = new VkRenderer(context, (uint)pixelW, (uint)pixelH);
         // The strip and border: a layout tree in design units, which the display's scale maps to pixels. The scale
         // is set again on every resize, as a window moved to another display is resized to its scale.
-        var chrome = new PipChrome<VulkanContext>(renderer) { FontPath = TitleFont() ?? "", DpiScale = window.DisplayScale };
+        // Its fullscreen button is YouTube's fullscreen, which only WebView2 takes from the strip (through the DevTools
+        // protocol) and reports for the window to follow (FullscreenChanged).
+        var chrome = new PipChrome<VulkanContext>(renderer)
+        {
+            FontPath = TitleFont() ?? "", DpiScale = window.DisplayScale, CanFullscreen = OperatingSystem.IsWindows(),
+        };
 
         // Window points are pixels on Windows and X11, the platforms with a web view backend, so SDL's hit test
         // asks the regions the last paint drew what is at its point.
@@ -235,8 +244,8 @@ internal static class Program
         PlaceWebView();
         web.Navigate(startUrl);
 
-        // Ctrl+H: out of sight, off the taskbar and Alt+Tab too, the video playing on; Win+/ brings it back.
-        // With no Win+/ to do that, it is only minimized.
+        // Ctrl+H and the strip's hide button: out of sight, off the taskbar and Alt+Tab too, the video playing on;
+        // Win+/ brings it back, as does launching it again. With no Win+/ to do that, it is only minimized.
         void Hide()
         {
             if (summonable)
@@ -405,6 +414,20 @@ internal static class Program
                 case PipButton.Pin:
                     onTop = !onTop;
                     window.SetAlwaysOnTop(onTop);
+                    break;
+                case PipButton.Hide:
+                    Hide();
+                    return;
+                case PipButton.Fullscreen:
+                    // YouTube's own fullscreen, which the window follows (FullscreenChanged). A page goes fullscreen
+                    // only on the user's gesture, and the press was on the strip, not in the page: the page script
+                    // clicks YouTube's button on an event the DevTools protocol dispatches as the user's. Folded, the
+                    // window unfolds first: there is no fullscreen from the strip alone.
+                    SetCollapsed(false);
+                    web.CallDevToolsProtocolMethodAsync("Runtime.evaluate",
+                            """{"expression":"window.dispatchEvent(new Event('ytpip-fullscreen'))","userGesture":true}""")
+                        .ContinueWith(t => PlayerLog.Write($"fullscreen: the press did not reach the page: {t.Exception?.GetBaseException().Message}"),
+                            CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
                     break;
                 case PipButton.Close:
                     PushQuit();

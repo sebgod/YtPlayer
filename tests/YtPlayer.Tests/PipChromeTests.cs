@@ -45,21 +45,23 @@ public class PipChromeTests
         => Chrome.FrameAreaAt(x, y).ShouldBe(expected);
 
     [Theory]
-    [InlineData(17, 14, PipButton.Back)]
-    [InlineData(51, 14, PipButton.Home)]
-    [InlineData(91, 14, PipButton.Previous)] // past the 6 between the page's buttons and the video's
-    [InlineData(125, 14, PipButton.PlayPause)]
-    [InlineData(159, 14, PipButton.Next)]
-    [InlineData(360, 14, PipButton.Collapse)]
-    [InlineData(400, 14, PipButton.Compact)]
-    [InlineData(430, 14, PipButton.Pin)]
-    [InlineData(465, 14, PipButton.Close)]
+    [InlineData(14, 14, PipButton.Back)]
+    [InlineData(42, 14, PipButton.Home)]
+    [InlineData(76, 14, PipButton.Previous)] // past the 6 between the page's buttons and the video's
+    [InlineData(104, 14, PipButton.PlayPause)]
+    [InlineData(132, 14, PipButton.Next)]
+    [InlineData(326, 14, PipButton.Collapse)]
+    [InlineData(354, 14, PipButton.Compact)]
+    [InlineData(382, 14, PipButton.Pin)]
+    [InlineData(410, 14, PipButton.Hide)]
+    [InlineData(438, 14, PipButton.Fullscreen)]
+    [InlineData(466, 14, PipButton.Close)]
     public void EachButtonIsWhereItIsDrawn(float x, float y, PipButton expected)
         => Chrome.HitTest(x, y).ShouldBe(new HitResult.ButtonHit(expected.ToString()));
 
     [Theory]
     [InlineData(200, 14)] // the strip between the buttons
-    [InlineData(71, 14)] // between home and previous
+    [InlineData(59, 14)] // between home and previous
     [InlineData(465, 100)] // the page, under the close button
     public void NoButtonIsElsewhere(float x, float y)
         => Chrome.HitTest(x, y).ShouldNotBeOfType<HitResult.ButtonHit>();
@@ -67,7 +69,7 @@ public class PipChromeTests
     [Fact]
     public void AButtonIsNotADragHandle()
     {
-        foreach (var x in new[] { 17, 51, 91, 125, 159, 360, 400, 430, 465 })
+        foreach (var x in new[] { 14, 42, 76, 104, 132, 326, 354, 382, 410, 438, 466 })
             Chrome.FrameAreaAt(x, 14).ShouldBe(HitTestResult.Normal);
     }
 
@@ -89,11 +91,11 @@ public class PipChromeTests
     public void TheButtonUnderThePointerLights()
     {
         var renderer = new RgbaImageRenderer(480, 300);
-        new PipChrome<RgbaImage>(renderer) { Pointer = (450, 14) }.Render(Plain);
+        new PipChrome<RgbaImage>(renderer) { Pointer = (455, 14) }.Render(Plain);
         // The close button's corner, clear of its mark: the close button's red.
-        Pixel(renderer, 450, 25).ShouldBe((0xc4, 0x2b, 0x1c));
-        // The pin button beside it is not lit.
-        Pixel(renderer, 415, 25).ShouldBe((0x18, 0x18, 0x1c));
+        Pixel(renderer, 455, 25).ShouldBe((0xc4, 0x2b, 0x1c));
+        // The fullscreen button beside it is not lit.
+        Pixel(renderer, 450, 25).ShouldBe((0x18, 0x18, 0x1c));
     }
 
     [Fact]
@@ -111,14 +113,14 @@ public class PipChromeTests
         var arranged = Layout.Engine.Arrange(chrome.Build(Plain with { Title = "A video" }),
             new Rect<float>(0, 0, 480, 300), new UnitContext());
         var title = arranged.Single(n => n.Node is Layout.Node.Leaf { Content: Layout.Content.Text });
-        title.Bounds.ShouldBe(new Rect<float>(182, 0, 156, 28)); // 176 + 6 to 344 - 6
+        title.Bounds.ShouldBe(new Rect<float>(152, 0, 154, 28)); // 146 + 6 to 312 - 6
     }
 
     [Fact]
     public void ATitleWithNoRoomIsLeftOut()
     {
         var chrome = new PipChrome<RgbaImage>(new RgbaImageRenderer(340, 200)) { FontPath = "any" };
-        // 340 less nine buttons of 34, the 6 between them and the padding leaves 16, under the 24 a title needs.
+        // 340 less eleven buttons of 28, the 6 between them and the padding leaves 14, under the 24 a title needs.
         Layout.Engine.Arrange(chrome.Build(Plain with { Title = "A video" }), new Rect<float>(0, 0, 340, 200),
                 new UnitContext())
             .Any(n => n.Node is Layout.Node.Leaf { Content: Layout.Content.Text })
@@ -130,14 +132,24 @@ public class PipChromeTests
     {
         var width = WindowFit.PipMinimum.W;
         var chrome = Painted(width, WindowFit.PipMinimum.H, Plain);
-        // Five from the left, the 6 after the second; four from the right.
-        float[] left = [17, 51, 91, 125, 159];
-        float[] right = [width - 136 + 17, width - 102 + 17, width - 68 + 17, width - 17];
+        // Five from the left, the 6 after the second; six from the right.
+        float[] left = [14, 42, 76, 104, 132];
+        float[] right = [width - 168 + 14, width - 140 + 14, width - 112 + 14, width - 84 + 14, width - 56 + 14, width - 14];
         var at = left.Concat(right).ToArray();
         var buttons = Enum.GetValues<PipButton>();
         at.Length.ShouldBe(buttons.Length);
         for (var i = 0; i < buttons.Length; i++)
             chrome.HitTest(at[i], 14).ShouldBe(new HitResult.ButtonHit(buttons[i].ToString()), $"at {at[i]}");
+    }
+
+    [Fact]
+    public void WithoutFullscreenHideSitsBesideClose()
+    {
+        var chrome = new PipChrome<RgbaImage>(new RgbaImageRenderer(480, 300)) { CanFullscreen = false };
+        chrome.Render(Plain);
+        chrome.HitTest(438, 14).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Hide)));
+        chrome.HitTest(466, 14).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Close)));
+        chrome.HitTest(410, 14).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Pin)));
     }
 
     private static readonly ChromeState Folded = Plain with { Mode = PipMode.Collapsed };
@@ -158,7 +170,7 @@ public class PipChromeTests
     public void CollapsedTheStripDragsAndNothingResizes(float x, float y, HitTestResult expected)
         => Collapsed.FrameAreaAt(x, y).ShouldBe(expected);
 
-    // At 150% (144 dpi) every design unit is a pixel and a half: the strip 42 pixels tall, a button 51 wide.
+    // At 150% (144 dpi) every design unit is a pixel and a half: the strip 42 pixels tall, a button 42 wide.
     private static readonly PipChrome<RgbaImage> Scaled = Painted(720, 450, Plain, scale: 1.5f);
 
     [Fact]
@@ -166,9 +178,9 @@ public class PipChromeTests
     {
         Scaled.WebViewBounds(Plain, 720, 450).ShouldBe(Rect(6, 42, 708, 402));
         Scaled.HitTest(670, 1).ShouldBeOfType<FrameHit>(); // the top edge, 6 pixels deep
-        Scaled.HitTest(670, 7).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Close)));
-        Scaled.HitTest(668, 20).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Pin)));
-        Scaled.HitTest(669, 20).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Close))); // 720 - 51
+        Scaled.HitTest(690, 7).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Close)));
+        Scaled.HitTest(677, 20).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Fullscreen)));
+        Scaled.HitTest(678, 20).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Close))); // 720 - 42
         Scaled.CollapsedHeight().ShouldBe(32f); // design units: the window scales it to its own coordinates
     }
 
