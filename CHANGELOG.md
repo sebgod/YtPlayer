@@ -3,7 +3,7 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
-## Unreleased
+## 0.1.14 (2026-10-19)
 
 - **YtPlayer updates itself.** With a newer release out, the help panel offers **Update to …**: the player
   downloads it, checks it against the checksum GitHub lists, and restarts as the new version, with the video that
