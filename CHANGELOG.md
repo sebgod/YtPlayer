@@ -3,7 +3,7 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
-## Unreleased
+## 0.1.15 (2026-10-19)
 
 - **The queue and home work again.** YouTube changed how its page runs commands, and Ctrl+Q, the queue's list and
   the strip's previous in a queue said "Cannot queue on this page"; home reloaded the page and stopped the video
