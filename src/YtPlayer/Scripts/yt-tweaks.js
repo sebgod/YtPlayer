@@ -371,9 +371,18 @@
   document.addEventListener('mousemove', function (e) { pointer = { x: e.clientX, y: e.clientY }; }, true);
   var VIDEO_TILE = 'ytd-video-renderer, ytd-rich-item-renderer, ytd-compact-video-renderer, ytd-grid-video-renderer,' +
     ' yt-lockup-view-model, ytd-playlist-panel-video-renderer, ytd-playlist-video-renderer, ytd-reel-item-renderer';
+  // Every element under the pointer, not only the top one: a moment over a thumbnail in a search or the home feed,
+  // YouTube lays its hover preview player over it, and that player is not in the tile.
+  function tileUnderPointer() {
+    var under = pointer ? document.elementsFromPoint(pointer.x, pointer.y) : [];
+    for (var i = 0; i < under.length; i++) {
+      var tile = under[i].closest && under[i].closest(VIDEO_TILE);
+      if (tile) return tile;
+    }
+    return null;
+  }
   function videoUnderPointer() {
-    var el = pointer && document.elementFromPoint(pointer.x, pointer.y);
-    var tile = el && el.closest && el.closest(VIDEO_TILE);
+    var tile = tileUnderPointer();
     var link = tile && tile.querySelector('a[href*="watch?v="], a[href*="/shorts/"]');
     var m = link && /[?&]v=([\w-]{11})|\/shorts\/([\w-]{11})/.exec(link.getAttribute('href') || '');
     if (!m) return null;
