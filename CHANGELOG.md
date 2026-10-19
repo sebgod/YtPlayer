@@ -3,7 +3,7 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
-## Unreleased
+## 0.1.16 (2026-10-19)
 
 - **An update picks up where you left off.** After updating itself the player comes back with compact as it was
   (it was always turned on), a paused video still paused, and the window still folded to its strip if it was.
