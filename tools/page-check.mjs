@@ -387,6 +387,29 @@ await evaluate(`window.__host({ togglePlay: true })`); await sleep(1500);
 s = await state();
 check('update: and only once', s.video?.paused === false, s.video);
 
+// 13. Ctrl+Q over a thumbnail YouTube's hover preview covers (a search's results): the preview player is not in the
+// tile, and the video under it is still the one queued.
+await send('Page.navigate', { url: 'https://www.youtube.com/results?search_query=depeche+mode' });
+await waitFor('Page.loadEventFired'); await sleep(6000);
+const thumb = JSON.parse(await evaluate(`(() => {
+  const t = [...document.querySelectorAll('ytd-video-renderer')].find(e => e.querySelector('a#thumbnail[href*="watch?v="]'));
+  if (!t) return 'null';
+  const a = t.querySelector('a#thumbnail'); a.scrollIntoView({ block: 'center' });
+  const b = a.getBoundingClientRect(), m = /[?&]v=([A-Za-z0-9_-]{11})/.exec(a.getAttribute('href'));
+  return m ? JSON.stringify({ x: b.x + b.width / 2, y: b.y + b.height / 2, id: m[1] }) : 'null';
+})()`) ?? 'null');
+if (thumb) {
+  await sleep(500);
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: thumb.x, y: thumb.y }); await sleep(3000);
+  const covered = await evaluate(`!document.elementFromPoint(${thumb.x}, ${thumb.y}).closest('ytd-video-renderer')`);
+  await evaluate(`window.__posted.length = 0`);
+  await press('q', 'KeyQ', 81, 2); await sleep(3500);
+  s = await state();
+  const said = await evaluate(`document.getElementById('ytpip-toast')?.textContent || ''`);
+  check('queue: Ctrl+Q over a thumbnail under its hover preview queues that video',
+    !s.posted.some(m => m.queueClipboard) && /^Queued/.test(said), { covered, said, posted: s.posted });
+} else check('queue: a search result to point at', false);
+
 ws.close(); proc.kill();
 console.log(failures ? `${failures} FAILED` : 'ALL PASSED');
 process.exit(failures ? 1 : 0);
