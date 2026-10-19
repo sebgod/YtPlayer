@@ -339,10 +339,26 @@
     if (v) v.currentTime = 0;
   }
 
+  // YouTube runs a command (an endpoint, a signal) through its app: ytd-app.resolveCommand until October 2026, and
+  // since then handleCommandWithCommandHandler, which hands it to the same resolver. False when neither is there.
+  function runCommand(command) {
+    var app = document.querySelector('ytd-app');
+    if (app && app.handleCommandWithCommandHandler) app.handleCommandWithCommandHandler(command, app);
+    else if (app && app.resolveCommand) app.resolveCommand(command);
+    else return false;
+    return true;
+  }
+
   // The strip's home button: YouTube's home, the way its logo goes there, within the page, so a video plays on in
-  // the background as it does when leaving it by any other link. Away from YouTube (a sign-in page), a load of it.
+  // the background as it does when leaving it by any other link. The app's own home action first: since October 2026
+  // a click on the logo reloads the page. Away from YouTube (a sign-in page), a load of it.
   function goHome() {
-    var logo = location.hostname === 'www.youtube.com' && document.querySelector('ytd-topbar-logo-renderer a#logo');
+    var onYouTube = location.hostname === 'www.youtube.com';
+    var app = onYouTube && document.querySelector('ytd-app');
+    if (app && app.onYtNavigateHomeAction) {
+      try { app.onYtNavigateHomeAction(); return; } catch (e) { /* not YouTube's app after all */ }
+    }
+    var logo = onYouTube && document.querySelector('ytd-topbar-logo-renderer a#logo');
     if (logo) logo.click();
     else location.assign('https://www.youtube.com/');
   }
@@ -378,10 +394,8 @@
   }
   // The command YouTube's own "Add to queue" sends, built from the id alone.
   function queueVideo(id, title) {
-    var app = document.querySelector('ytd-app');
-    if (!app || !app.resolveCommand) { toast('Cannot queue on this page'); return; }
     try {
-      app.resolveCommand({ signalServiceEndpoint: { signal: 'CLIENT_SIGNAL', actions: [{ addToPlaylistCommand: {
+      var ran = runCommand({ signalServiceEndpoint: { signal: 'CLIENT_SIGNAL', actions: [{ addToPlaylistCommand: {
         openMiniplayer: false, videoId: id, listType: 'PLAYLIST_EDIT_LIST_TYPE_QUEUE', videoIds: [id],
         onCreateListCommand: {
           commandMetadata: { webCommandMetadata: { sendPost: true, apiUrl: '/youtubei/v1/playlist/create' } },
@@ -389,6 +403,7 @@
         videoCommand: {
           commandMetadata: { webCommandMetadata: { url: '/watch?v=' + id, webPageType: 'WEB_PAGE_TYPE_WATCH', rootVe: 3832 } },
           watchEndpoint: { videoId: id } } } }] } });
+      if (!ran) { toast('Cannot queue on this page'); return; }
     } catch (e) { toast('Could not queue it'); return; }
     // The queue takes the entry a little later (longer when it first turns a mix into a queue), with the title a
     // link did not carry; the notice waits for it, up to three seconds.
@@ -424,8 +439,7 @@
       entry.textContent = (v.selected ? '\u25b6 ' : (i + 1) + '. ') + (textOf(v.title) || v.videoId);
       entry.addEventListener('click', function () {
         closeQueueList();
-        var app = document.querySelector('ytd-app');
-        if (app && app.resolveCommand && v.navigationEndpoint) app.resolveCommand(v.navigationEndpoint);
+        if (v.navigationEndpoint) runCommand(v.navigationEndpoint);
       });
       panel.appendChild(entry);
     });

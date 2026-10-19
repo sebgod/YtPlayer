@@ -33,10 +33,11 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
 - The strip's previous goes back in a playlist, a mix or the queue when the player's `getPlaylistIndex()` is past
   the first, and otherwise starts the video over. The player's own previous button is no guide (YouTube hides it in a
   player as narrow as the window's), nor is the media session's previous (YouTube sets it for a whole mix, its first
-  video included, where it does nothing). Home clicks YouTube's logo, so the page goes there without a reload and a
-  video plays on in the background.
+  video included, where it does nothing). Home runs the app's `onYtNavigateHomeAction` (the logo's endpoint), so the
+  page goes there without a reload and a video plays on in the background; a click on the logo itself reloads the
+  page since YouTube's October 2026 change, and is only the fallback.
 - The queue is YouTube's own: the script adds with the `addToPlaylistCommand` its "Add to queue" sends, run through
-  `ytd-app.resolveCommand`, and reads `yt-playlist-manager.getPlaylistData()`. Both are YouTube internals; the
+  `ytd-app.handleCommandWithCommandHandler` (`runCommand`; `resolveCommand` before October 2026), and reads `yt-playlist-manager.getPlaylistData()`. Both are YouTube internals; the
   page check covers them.
 - Help (the strip's `?`, F1) is a panel in the page: the host sends `{help}` (`Program.HelpMessage`: the version,
   the update check's word, whether Win+/ is ours) and the script draws it, with the list of keys, which is the
