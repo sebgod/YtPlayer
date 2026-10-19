@@ -312,5 +312,7 @@ internal static class SelfUpdate
 
     private static bool IsPlainName(string name)
         => name.Length > 0 && name == Path.GetFileName(name) && name is not ("." or "..")
+           // Either separator, whatever the platform's: a release's names are Windows', and Linux would take \ as a letter.
+           && name.IndexOfAny(['/', '\\']) < 0
            && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
 }
