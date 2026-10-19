@@ -47,6 +47,9 @@ To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` 
   while it shows). A video given on the command line opens compact. Leaving a video lets it play on in
   the background; turning compact on brings it back.
 - **Stay on top** (the dot): red while the window floats above others.
+- **Help** (`?`, or F1) shows the keys, the version, and whether a newer one is out, over the page; Esc or a click
+  elsewhere closes it. YtPlayer asks GitHub for its latest release once a day at start and each time help opens;
+  while a newer one is out the `?` has a red dot, and the panel links to its page. It never updates itself.
 - **Hide** (`—`) takes the window out of sight, off the taskbar and Alt+Tab too, the video playing on, as Ctrl+H
   does. Win+/ brings it back, and so does starting YtPlayer again. If another app holds Win+/, it only minimizes.
 - **Fullscreen** (the four corners) is YouTube's fullscreen, as its own button or F gives it, on a video's page
@@ -75,6 +78,7 @@ and remembers each size, as you last left it, between runs; so are its position 
 
 | Key | |
 | --- | --- |
+| **F1** | the help panel: these keys, the version, and whether a newer one is out |
 | **Win+/** | from any app: the player comes forward with the keyboard, shown again if hidden. Windows only |
 | **Ctrl+H** | hides the window, off the taskbar and Alt+Tab too, the video playing on; Win+/ brings it back (if another app holds Win+/, it only minimizes) |
 | **Ctrl+F** | YouTube's search box (on a compact video, compact steps aside until you pick a result or press Esc) |

@@ -3,7 +3,8 @@ using System.Text.Json.Serialization;
 
 namespace YtPlayer;
 
-/// <summary>What the player remembers between runs: where the window was, its two sizes, and its modes.
+/// <summary>What the player remembers between runs: where the window was, its two sizes, its modes, and what the
+/// last update check found.
 /// Sizes are in window coordinates; unset, they come from <see cref="WindowFit"/>'s defaults, scaled
 /// for the display.</summary>
 internal sealed record PlayerSettings
@@ -18,6 +19,10 @@ internal sealed record PlayerSettings
     public int? BrowseHeight { get; init; }
     public bool OnTop { get; init; } = true;
     public bool Compact { get; init; } = true;
+    /// <summary>The latest release the last update check found, and when it looked (UpdateCheck.Fresh).</summary>
+    public string? LatestVersion { get; init; }
+    public string? LatestUrl { get; init; }
+    public DateTimeOffset? UpdateCheckedAt { get; init; }
 
     public static string DataFolder { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.Create),

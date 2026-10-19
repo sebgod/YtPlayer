@@ -57,7 +57,23 @@
     '#ytpip-queue .ytpip-q { display: block; width: 100%; padding: 4px 12px; border: 0; background: none; color: inherit;' +
     ' font: inherit; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
     '#ytpip-queue .ytpip-q:hover { background: rgba(255, 255, 255, 0.1); }\n' +
-    '#ytpip-queue .ytpip-q-now { color: #ff3030; }\n';
+    '#ytpip-queue .ytpip-q-now { color: #ff3030; }\n' +
+    // The help panel (the strip's ? and F1): the keys, the version and whether a newer one is out, over everything.
+    '#ytpip-help { position: fixed; left: 8px; right: 8px; top: 8px; max-height: calc(100vh - 16px); overflow: auto;' +
+    ' z-index: 2147483647; padding: 10px 14px; border-radius: 8px; background: rgba(24, 24, 28, 0.96); color: #ddd;' +
+    ' font: 400 13px/1.35 Roboto, Arial, sans-serif; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5); }\n' +
+    '#ytpip-help .ytpip-help-close { position: absolute; top: 4px; right: 6px; width: 24px; height: 24px; padding: 0;' +
+    ' border: 0; border-radius: 4px; background: none; color: #aaa; font: 400 18px/24px Roboto, Arial, sans-serif;' +
+    ' cursor: pointer; }\n' +
+    '#ytpip-help .ytpip-help-close:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }\n' +
+    '#ytpip-help h2 { margin: 0 0 2px; font: 500 14px/1.3 Roboto, Arial, sans-serif; color: #fff; }\n' +
+    '#ytpip-help .ytpip-help-update { margin: 0 0 8px; color: #aaa; }\n' +
+    '#ytpip-help .ytpip-help-newer { padding: 0; border: 0; background: none; color: #ff3030; font: inherit;' +
+    ' text-decoration: underline; cursor: pointer; }\n' +
+    '#ytpip-help table { border-collapse: collapse; }\n' +
+    '#ytpip-help td { padding: 1px 0; vertical-align: top; }\n' +
+    '#ytpip-help td:first-child { padding-right: 14px; white-space: nowrap; color: #fff; font-weight: 500; }\n' +
+    '#ytpip-help .ytpip-help-foot { margin: 8px 0 0; color: #888; }\n';
 
   function addStyle() {
     var style = document.createElement('style');
@@ -452,6 +468,104 @@
     post({ hide: true });
   }, true);
 
+  // The help panel: F1 or the strip's ? (the host's {help}, which brings the version and the update check's answer).
+  // The keys are this script's and the host's; the README has the same list.
+  function helpKeys(summon) {
+    return [
+      ['F1', 'this help'],
+      summon ? ['Win+/', 'the player comes forward, from any app'] : null,
+      ['Ctrl+H', summon ? 'hide the window; Win+/ brings it back' : 'minimize the window'],
+      ['Ctrl+F', "YouTube's search"],
+      ['Ctrl+P', 'play / pause'],
+      ['Shift+N / Shift+P', 'next / previous video'],
+      ['Ctrl+V', 'open a YouTube link from the clipboard'],
+      ['Ctrl+C', "copy the video's link (with nothing selected)"],
+      ['Ctrl+Shift+C', "copy the video's link at the current time"],
+      ['Ctrl+Q', 'queue the video under the pointer, or the copied link'],
+      ['Ctrl+L', 'list the queue'],
+      ['Ctrl+Up / Ctrl+Down', 'fold the window to its strip / unfold it'],
+      ['F', "YouTube's fullscreen"],
+      ['Esc', 'close this, the queue or the search']
+    ].filter(Boolean);
+  }
+  function closeHelp() {
+    var el = document.getElementById('ytpip-help');
+    if (el) el.remove();
+  }
+  function updateLine(h) {
+    var line = document.createElement('p');
+    line.className = 'ytpip-help-update';
+    if (h.update === 'newer' && h.newer) {
+      // The host opens the release it found; the page names no address.
+      var link = document.createElement('button');
+      link.className = 'ytpip-help-newer';
+      link.textContent = 'YtPlayer ' + h.newer + ' is out: get it';
+      link.addEventListener('click', function () { post({ openRelease: true }); });
+      line.appendChild(link);
+    } else {
+      line.textContent = h.update === 'checking' ? 'Looking for a newer version…'
+        : h.update === 'current' ? 'Up to date'
+        : 'Could not look for a newer version';
+    }
+    return line;
+  }
+  function renderHelp(panel, h) {
+    panel.textContent = '';
+    // The × closes it, as Esc and a click outside do.
+    var close = document.createElement('button');
+    close.className = 'ytpip-help-close';
+    close.title = 'Close (Esc)';
+    close.textContent = '\u00d7';
+    close.addEventListener('click', closeHelp);
+    panel.appendChild(close);
+    var heading = document.createElement('h2');
+    heading.textContent = 'YtPlayer ' + h.version;
+    panel.appendChild(heading);
+    panel.appendChild(updateLine(h));
+    var table = document.createElement('table');
+    helpKeys(h.summon).forEach(function (k) {
+      var row = table.insertRow();
+      row.insertCell().textContent = k[0];
+      row.insertCell().textContent = k[1];
+    });
+    panel.appendChild(table);
+    var foot = document.createElement('p');
+    foot.className = 'ytpip-help-foot';
+    foot.textContent = "YouTube's own keys: Shift+/ in the page.";
+    panel.appendChild(foot);
+  }
+  // open: the panel opens, or closes if it is open. Otherwise an open one takes the host's news (the update check's
+  // answer), and a closed one stays closed.
+  function showHelp(h) {
+    var panel = document.getElementById('ytpip-help');
+    if (h.open && panel) { panel.remove(); return; }
+    if (!h.open && !panel) return;
+    if (!panel) {
+      closeQueueList();
+      panel = document.createElement('div');
+      panel.id = 'ytpip-help';
+      document.documentElement.appendChild(panel);
+    }
+    renderHelp(panel, h);
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'F1' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      post({ help: true });
+      return;
+    }
+    if (e.key !== 'Escape' || !document.getElementById('ytpip-help')) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    closeHelp();
+  }, true);
+  // A click anywhere else closes it, as it does the queue's list.
+  document.addEventListener('mousedown', function (e) {
+    var el = document.getElementById('ytpip-help');
+    if (el && !el.contains(e.target)) closeHelp();
+  }, true);
+
   document.addEventListener('paste', function (e) {
     if (isTextField(e.target) || isTextField(document.activeElement)) return;
     var text = e.clipboardData && e.clipboardData.getData('text/plain');
@@ -487,6 +601,7 @@
       }
       if (d && d.listQueue) showQueueList(false);
       if (d && d.mediaAction) mediaAction(d.mediaAction);
+      if (d && d.help && typeof d.help === 'object') showHelp(d.help);
     });
   } catch (e) { /* no host bridge */ }
   // Whether the player's video plays, for the strip's play/pause button. Media events do not bubble, but

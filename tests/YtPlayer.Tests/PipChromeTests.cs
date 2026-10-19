@@ -50,9 +50,10 @@ public class PipChromeTests
     [InlineData(76, 14, PipButton.Previous)] // past the 6 between the page's buttons and the video's
     [InlineData(104, 14, PipButton.PlayPause)]
     [InlineData(132, 14, PipButton.Next)]
-    [InlineData(326, 14, PipButton.Collapse)]
-    [InlineData(354, 14, PipButton.Compact)]
-    [InlineData(382, 14, PipButton.Pin)]
+    [InlineData(298, 14, PipButton.Collapse)]
+    [InlineData(326, 14, PipButton.Compact)]
+    [InlineData(354, 14, PipButton.Pin)]
+    [InlineData(382, 14, PipButton.Help)]
     [InlineData(410, 14, PipButton.Hide)]
     [InlineData(438, 14, PipButton.Fullscreen)]
     [InlineData(466, 14, PipButton.Close)]
@@ -69,7 +70,7 @@ public class PipChromeTests
     [Fact]
     public void AButtonIsNotADragHandle()
     {
-        foreach (var x in new[] { 14, 42, 76, 104, 132, 326, 354, 382, 410, 438, 466 })
+        foreach (var x in new[] { 14, 42, 76, 104, 132, 298, 326, 354, 382, 410, 438, 466 })
             Chrome.FrameAreaAt(x, 14).ShouldBe(HitTestResult.Normal);
     }
 
@@ -113,15 +114,15 @@ public class PipChromeTests
         var arranged = Layout.Engine.Arrange(chrome.Build(Plain with { Title = "A video" }),
             new Rect<float>(0, 0, 480, 300), new UnitContext());
         var title = arranged.Single(n => n.Node is Layout.Node.Leaf { Content: Layout.Content.Text });
-        title.Bounds.ShouldBe(new Rect<float>(152, 0, 154, 28)); // 146 + 6 to 312 - 6
+        title.Bounds.ShouldBe(new Rect<float>(152, 0, 126, 28)); // 146 + 6 to 284 - 6
     }
 
     [Fact]
     public void ATitleWithNoRoomIsLeftOut()
     {
-        var chrome = new PipChrome<RgbaImage>(new RgbaImageRenderer(340, 200)) { FontPath = "any" };
-        // 340 less eleven buttons of 28, the 6 between them and the padding leaves 14, under the 24 a title needs.
-        Layout.Engine.Arrange(chrome.Build(Plain with { Title = "A video" }), new Rect<float>(0, 0, 340, 200),
+        var chrome = new PipChrome<RgbaImage>(new RgbaImageRenderer(368, 200)) { FontPath = "any" };
+        // 368 less twelve buttons of 28, the 6 between them and the padding leaves 14, under the 24 a title needs.
+        Layout.Engine.Arrange(chrome.Build(Plain with { Title = "A video" }), new Rect<float>(0, 0, 368, 200),
                 new UnitContext())
             .Any(n => n.Node is Layout.Node.Leaf { Content: Layout.Content.Text })
             .ShouldBeFalse();
@@ -132,9 +133,10 @@ public class PipChromeTests
     {
         var width = WindowFit.PipMinimum.W;
         var chrome = Painted(width, WindowFit.PipMinimum.H, Plain);
-        // Five from the left, the 6 after the second; six from the right.
+        // Five from the left, the 6 after the second; seven from the right.
         float[] left = [14, 42, 76, 104, 132];
-        float[] right = [width - 168 + 14, width - 140 + 14, width - 112 + 14, width - 84 + 14, width - 56 + 14, width - 14];
+        float[] right = [width - 196 + 14, width - 168 + 14, width - 140 + 14, width - 112 + 14, width - 84 + 14,
+            width - 56 + 14, width - 14];
         var at = left.Concat(right).ToArray();
         var buttons = Enum.GetValues<PipButton>();
         at.Length.ShouldBe(buttons.Length);
@@ -149,7 +151,18 @@ public class PipChromeTests
         chrome.Render(Plain);
         chrome.HitTest(438, 14).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Hide)));
         chrome.HitTest(466, 14).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Close)));
-        chrome.HitTest(410, 14).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Pin)));
+        chrome.HitTest(410, 14).ShouldBe(new HitResult.ButtonHit(nameof(PipButton.Help)));
+    }
+
+    [Fact]
+    public void WithANewerReleaseOutTheHelpButtonWearsARedDot()
+    {
+        // The dot's middle: at the help mark's top right (the button 368 to 396, its mark 377 to 387, from 9 down).
+        var renderer = new RgbaImageRenderer(480, 300);
+        new PipChrome<RgbaImage>(renderer).Render(Plain);
+        Pixel(renderer, 388, 9).ShouldBe((0x18, 0x18, 0x1c));
+        new PipChrome<RgbaImage>(renderer).Render(Plain with { Update = true });
+        Pixel(renderer, 388, 9).ShouldBe((0xff, 0x30, 0x30));
     }
 
     private static readonly ChromeState Folded = Plain with { Mode = PipMode.Collapsed };

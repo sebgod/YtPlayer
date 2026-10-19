@@ -3,6 +3,14 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
+## 0.1.13 (2026-10-19)
+
+- **Help, in the strip and on F1.** The `?` button (and F1, in the page or on the strip) shows the keys, the version,
+  and whether a newer YtPlayer is out, over the page. The player asks GitHub for its latest release once a day at
+  start and each time help opens; while a newer one is out the `?` wears a red dot, and the panel links to the
+  release. Nothing updates itself. The narrowest window is a button wider (348). The panel closes on its
+  `×`, on Esc, or on a click outside it.
+
 ## 0.1.12 (2026-10-16)
 
 - **The strip has hide and fullscreen buttons.** Hide (`—`) takes the window out of sight as Ctrl+H does, and

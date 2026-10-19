@@ -6,6 +6,13 @@ namespace YtPlayer.Tests;
 public class PageMessageTests
 {
     [Fact]
+    public void F1AsksForTheHelpPanel() => PageMessage.Parse("""{"help":true}""").Help.ShouldBeTrue();
+
+    [Fact]
+    public void TheHelpPanelsLinkAsksForTheRelease()
+        => PageMessage.Parse("""{"openRelease":true}""").ShouldBe(new PageMessage(false, null, null, OpenRelease: true));
+
+    [Fact]
     public void ReadyAsksForTheCompactState()
         => PageMessage.Parse("""{"ready":true}""").ShouldBe(new PageMessage(true, null, null));
 
