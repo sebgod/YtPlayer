@@ -34,6 +34,10 @@ internal static class Program
         // the stack, and a task's exception nobody awaited is logged too rather than lost.
         AppDomain.CurrentDomain.UnhandledException += (_, e) => PlayerLog.Write($"crash: {e.ExceptionObject}");
         TaskScheduler.UnobservedTaskException += (_, e) => PlayerLog.Write($"unobserved: {e.Exception.GetBaseException()}");
+        // A step of an update in progress (SelfUpdate), before anything else: the staged copy only swaps itself in
+        // and exits, with no window; the installed exe after it goes on as the player, with the link it was handed.
+        if (SelfUpdate.Continue(ref args) is { } stepExit)
+            return stepExit;
         var settings = PlayerSettings.Load();
         // --start-minimised: start out of sight, as Ctrl+H leaves the window, for Win+/ to bring up (a login item).
         var startHidden = args.Any(IsStartMinimised);
@@ -65,6 +69,10 @@ internal static class Program
         var updateCheckedAt = settings.UpdateCheckedAt;
         var checkingUpdate = false;
         var updateFailed = false;
+        // A release build updates itself from the help panel (SelfUpdate); any other only links to the release.
+        var installed = SelfUpdate.Installed();
+        var updating = false;
+        var updateBroke = false;
         bool UpdateAvailable() => latest is { } release && UpdateCheck.IsNewer(UpdateCheck.CurrentVersion, release.Version);
 
         using var app = SdlVulkanApp.Create();
@@ -197,6 +205,14 @@ internal static class Program
             web.SetBounds(chrome.WebViewBounds(State(), w, h));
         }
         var adLog = new AdLog();
+        // The page has said {ready}: WebView2 takes no message before its first navigation, and throws. What the host
+        // tells the page unasked (the update check's answer, which can come back first) waits for it.
+        var pageReady = false;
+        void TellPage(string json)
+        {
+            if (pageReady)
+                web.PostMessage(json);
+        }
         // Not awaited: registered before the attach, it completes only after it, and the first
         // navigation waits for it anyway. Watched only so a refusal is not silent.
         web.AddScriptAtDocumentStartAsync(LoadTweaksScript()).ContinueWith(
@@ -210,6 +226,7 @@ internal static class Program
             // one that was (a pasted link, a launch's hand-off) says nothing, so the window leaves it here.
             if (message.Ready)
             {
+                pageReady = true;
                 SetFullscreen(false);
                 web.PostMessage(CompactMessage(compact));
             }
@@ -251,6 +268,8 @@ internal static class Program
             // Only the release the check found, whatever the page asks.
             if (message.OpenRelease && UpdateAvailable() && !OpenURL(latest!.Url))
                 PlayerLog.Write($"the release page did not open: {GetError()}");
+            if (message.Update)
+                StartUpdate(YouTubeUrl.FromPastedLink(message.Resume));
         });
         web.TitleChanged += title => UiQueue.Enqueue(() =>
         {
@@ -279,7 +298,7 @@ internal static class Program
                     latest = found;
                     updateCheckedAt = DateTimeOffset.Now;
                 }
-                web.PostMessage(HelpNow(open: false));
+                TellPage(HelpNow(open: false));
             }), TaskScheduler.Default);
         }
         if (updateCheckedAt is not { } checkedAt || DateTimeOffset.Now - checkedAt > UpdateCheck.Fresh)
@@ -291,13 +310,40 @@ internal static class Program
         {
             SetCollapsed(false);
             CheckForUpdate();
-            web.PostMessage(HelpNow(open: true));
+            TellPage(HelpNow(open: true));
         }
         string HelpNow(bool open)
             => HelpMessage(open, UpdateCheck.CurrentVersion,
                 UpdateAvailable() ? latest!.Version : null,
-                UpdateAvailable() ? "newer" : checkingUpdate ? "checking" : updateFailed ? "unknown" : "current",
-                summonable);
+                updating ? "downloading"
+                : updateBroke ? "failed"
+                : UpdateAvailable() ? "newer" : checkingUpdate ? "checking" : updateFailed ? "unknown" : "current",
+                summonable, canUpdate: installed is not null);
+
+        // The help panel's update button: the newer release downloaded and checked into update\ beside the exe, then
+        // handed over to (SelfUpdate). The window goes out of sight at once and the player quits as usual; the next
+        // window is the new version's, with what was playing. Until the download is done, the player plays on.
+        void StartUpdate(string? resume)
+        {
+            if (installed is null || updating)
+                return;
+            updating = true;
+            updateBroke = false;
+            TellPage(HelpNow(open: false));
+            SelfUpdate.StageAsync(installed).ContinueWith(t => UiQueue.Enqueue(() =>
+            {
+                updating = false;
+                var staged = t.IsCompletedSuccessfully ? t.Result : null;
+                if (staged is not null && SelfUpdate.StartStaged(staged, resume))
+                {
+                    window.Hide();
+                    PushQuit();
+                    return;
+                }
+                updateBroke = true;
+                TellPage(HelpNow(open: false));
+            }), TaskScheduler.Default);
+        }
 
         // Ctrl+H and the strip's hide button: out of sight, off the taskbar and Alt+Tab too, the video playing on;
         // Win+/ brings it back, as does launching it again. With no Win+/ to do that, it is only minimized.
@@ -635,8 +681,10 @@ internal static class Program
     }
 
     // {help}: open (or close) the panel, or, with open false, bring an open one up to date. newer is the release that
-    // is out, update what the panel says of it (newer, checking, current, unknown), summon whether Win+/ is ours.
-    internal static string HelpMessage(bool open, string version, string? newer, string update, bool summon)
+    // is out, update what the panel says of it (newer, checking, current, unknown, downloading, failed), summon
+    // whether Win+/ is ours, canUpdate whether this build updates itself (a release build).
+    internal static string HelpMessage(bool open, string version, string? newer, string update, bool summon,
+        bool canUpdate = false)
     {
         var buffer = new MemoryStream();
         using (var json = new Utf8JsonWriter(buffer))
@@ -651,6 +699,7 @@ internal static class Program
                 json.WriteString("newer", newer);
             json.WriteString("update", update);
             json.WriteBoolean("summon", summon);
+            json.WriteBoolean("canUpdate", canUpdate);
             json.WriteEndObject();
             json.WriteEndObject();
         }

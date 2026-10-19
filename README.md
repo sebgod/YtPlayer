@@ -49,7 +49,10 @@ To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` 
 - **Stay on top** (the dot): red while the window floats above others.
 - **Help** (`?`, or F1) shows the keys, the version, and whether a newer one is out, over the page; Esc or a click
   elsewhere closes it. YtPlayer asks GitHub for its latest release once a day at start and each time help opens;
-  while a newer one is out the `?` has a red dot, and the panel links to its page. It never updates itself.
+  while a newer one is out the `?` has a red dot. **Update to …** in the panel updates YtPlayer where it is: it
+  downloads the release, checks it against the checksum GitHub lists, and restarts as the new version with the
+  video that was playing, at its time. That is for a release downloaded from GitHub (Windows); a build of your own
+  only links to the release page.
 - **Hide** (`—`) takes the window out of sight, off the taskbar and Alt+Tab too, the video playing on, as Ctrl+H
   does. Win+/ brings it back, and so does starting YtPlayer again. If another app holds Win+/, it only minimizes.
 - **Fullscreen** (the four corners) is YouTube's fullscreen, as its own button or F gives it, on a video's page

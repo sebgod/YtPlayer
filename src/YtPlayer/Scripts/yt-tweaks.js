@@ -492,16 +492,37 @@
     var el = document.getElementById('ytpip-help');
     if (el) el.remove();
   }
+  // What plays, at its time, for the player to open again once it has updated itself.
+  function resumeLink() {
+    var video = playerVideo();
+    return video ? 'https://youtu.be/' + video.id + (video.time > 0 ? '?t=' + video.time : '') : location.href;
+  }
+  function helpLink(text, onClick) {
+    var link = document.createElement('button');
+    link.className = 'ytpip-help-newer';
+    link.textContent = text;
+    link.addEventListener('click', onClick);
+    return link;
+  }
+  // The host opens the release it found and downloads the update it found; the page names no address.
   function updateLine(h) {
     var line = document.createElement('p');
     line.className = 'ytpip-help-update';
-    if (h.update === 'newer' && h.newer) {
-      // The host opens the release it found; the page names no address.
-      var link = document.createElement('button');
-      link.className = 'ytpip-help-newer';
-      link.textContent = 'YtPlayer ' + h.newer + ' is out: get it';
-      link.addEventListener('click', function () { post({ openRelease: true }); });
-      line.appendChild(link);
+    var release = function () { post({ openRelease: true }); };
+    if (h.update === 'newer' && h.newer && h.canUpdate) {
+      line.appendChild(helpLink('Update to ' + h.newer, function () { post({ update: true, resume: resumeLink() }); }));
+      line.appendChild(document.createTextNode(' · '));
+      line.appendChild(helpLink("what's new", release));
+    } else if (h.update === 'newer' && h.newer) {
+      line.appendChild(helpLink('YtPlayer ' + h.newer + ' is out: get it', release));
+    } else if (h.update === 'downloading') {
+      line.textContent = 'Downloading the update… the player restarts with it';
+    } else if (h.update === 'failed') {
+      line.textContent = 'The update failed (ytplayer.log says why)';
+      if (h.newer) {
+        line.appendChild(document.createTextNode(' · '));
+        line.appendChild(helpLink('get it from its page', release));
+      }
     } else {
       line.textContent = h.update === 'checking' ? 'Looking for a newer version…'
         : h.update === 'current' ? 'Up to date'

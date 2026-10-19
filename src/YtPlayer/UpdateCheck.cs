@@ -4,18 +4,29 @@ using System.Text.Json;
 
 namespace YtPlayer;
 
-/// <summary>A release on GitHub: its version (the tag without its <c>v</c>) and its page.</summary>
-internal sealed record Release(string Version, string Url);
+/// <summary>A release on GitHub: its version (the tag without its <c>v</c>) and its page, and its downloads, as GitHub
+/// lists them (none for one remembered in settings).</summary>
+internal sealed record Release(string Version, string Url)
+{
+    public IReadOnlyList<ReleaseAsset> Assets { get; init; } = [];
+}
+
+/// <summary>A release's download: its file name, where to get it, and its SHA-256 as GitHub computed it on upload
+/// (null when GitHub gave none).</summary>
+internal sealed record ReleaseAsset(string Name, string Url, string? Sha256);
 
 /// <summary>
 /// Whether a newer YtPlayer is out: GitHub's latest release, against the version this build carries (the release
-/// workflow's <c>-p:Version</c>, from the tag). It only says so; the release page is where to get it.
+/// workflow's <c>-p:Version</c>, from the tag). A release build can then update itself (<see cref="SelfUpdate"/>);
+/// any other is pointed at the release page.
 /// </summary>
 internal static class UpdateCheck
 {
     private const string LatestApi = "https://api.github.com/repos/sebgod/YtPlayer/releases/latest";
     /// <summary>Where a release's page must be for the player to open it.</summary>
     public const string ReleasesPage = "https://github.com/sebgod/YtPlayer/releases/";
+    /// <summary>Where a release's download must be for the player to fetch it.</summary>
+    public const string ReleaseDownloads = "https://github.com/sebgod/YtPlayer/releases/download/";
 
     /// <summary>How long a check's answer holds: at start, an older one is asked again.</summary>
     public static readonly TimeSpan Fresh = TimeSpan.FromDays(1);
@@ -58,13 +69,37 @@ internal static class UpdateCheck
                    && root.TryGetProperty("html_url", out var url) && url.ValueKind == JsonValueKind.String
                    && Plain(tag.GetString()!) is { Length: > 0 } version
                    && url.GetString() is { } page && page.StartsWith(ReleasesPage, StringComparison.Ordinal)
-                ? new Release(version, page)
+                ? new Release(version, page) { Assets = AssetsOf(root) }
                 : null;
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+    // The release's downloads that are ours; one without a name or an address of ours is left out.
+    private static ReleaseAsset[] AssetsOf(JsonElement release)
+    {
+        if (!release.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
+            return [];
+        var list = new List<ReleaseAsset>();
+        foreach (var a in assets.EnumerateArray())
+        {
+            if (a.ValueKind == JsonValueKind.Object
+                && a.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String
+                && a.TryGetProperty("browser_download_url", out var url) && url.ValueKind == JsonValueKind.String
+                && url.GetString() is { } address && address.StartsWith(ReleaseDownloads, StringComparison.Ordinal))
+            {
+                var digest = a.TryGetProperty("digest", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null;
+                const string sha256 = "sha256:";
+                list.Add(new ReleaseAsset(name.GetString()!, address,
+                    digest is not null && digest.StartsWith(sha256, StringComparison.OrdinalIgnoreCase)
+                        ? digest[sha256.Length..].ToLowerInvariant()
+                        : null));
+            }
+        }
+        return [.. list];
     }
 
     /// <summary>Whether <paramref name="latest"/> is newer than <paramref name="current"/>; a version either cannot
