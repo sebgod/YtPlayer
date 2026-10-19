@@ -3,6 +3,12 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
+## Unreleased
+
+- **A video paused before an update stays paused after it**, signed in too. YouTube plays a video again after a
+  pause when it takes up where the watch history left off, which undid the single pause 0.1.16 gave it. The video
+  now stays paused until you play it, or for 15 seconds.
+
 ## 0.1.17 (2026-10-19)
 
 - **Ctrl+Q over a thumbnail queues its video** in a search's results and the home feed too. A moment over a thumbnail
