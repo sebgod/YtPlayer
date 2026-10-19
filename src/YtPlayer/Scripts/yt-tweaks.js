@@ -524,7 +524,10 @@
     line.className = 'ytpip-help-update';
     var release = function () { post({ openRelease: true }); };
     if (h.update === 'newer' && h.newer && h.canUpdate) {
-      line.appendChild(helpLink('Update to ' + h.newer, function () { post({ update: true, resume: resumeLink() }); }));
+      line.appendChild(helpLink('Update to ' + h.newer, function () {
+        var v = document.querySelector('#movie_player video');
+        post({ update: true, resume: resumeLink(), paused: !!v && v.paused });
+      }));
       line.appendChild(document.createTextNode(' · '));
       line.appendChild(helpLink("what's new", release));
     } else if (h.update === 'newer' && h.newer) {
@@ -637,6 +640,7 @@
       if (d && d.listQueue) showQueueList(false);
       if (d && d.mediaAction) mediaAction(d.mediaAction);
       if (d && d.help && typeof d.help === 'object') showHelp(d.help);
+      if (d && d.startPaused) pauseOnStart();
     });
   } catch (e) { /* no host bridge */ }
   // Whether the player's video plays, for the strip's play/pause button. Media events do not bubble, but
@@ -648,6 +652,20 @@
     // A new video in the player says so here too, should YouTube set the session's metadata before the player's.
     reportMedia();
   }
+  // Back from an update that left the video paused ({startPaused}): the video, not an ad before it, is paused as it
+  // starts, once; YouTube autoplays a video it opens.
+  var startPaused = false;
+  function pauseIfAsked() {
+    var v = document.querySelector('#movie_player video');
+    if (!startPaused || !v || v.paused || document.querySelector('#movie_player.ad-showing')) return;
+    startPaused = false;
+    v.pause();
+  }
+  function pauseOnStart() {
+    startPaused = true;
+    pauseIfAsked();
+  }
+  document.addEventListener('playing', pauseIfAsked, true);
   ['playing', 'pause', 'ended', 'emptied'].forEach(function (type) {
     document.addEventListener(type, reportPlaying, true);
   });

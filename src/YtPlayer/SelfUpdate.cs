@@ -38,6 +38,10 @@ internal static class SelfUpdate
     // How long a step waits for the one before it to exit: the player saves its settings and closes its web view.
     private static readonly TimeSpan ExitWait = TimeSpan.FromSeconds(60);
 
+    /// <summary>This start finishes an update (step 3): the player takes up where the old version left off
+    /// (<see cref="ResumeState"/>). Set by <see cref="Continue"/>.</summary>
+    public static bool Resumed { get; private set; }
+
     /// <summary>The folder the running exe is in.</summary>
     public static string AppFolder { get; } = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
 
@@ -221,6 +225,7 @@ internal static class SelfUpdate
                 Thread.Sleep(300);
             }
         }
+        Resumed = true;
         PlayerLog.Write(UpdateCheck.CurrentVersion == step.Version
             ? $"update: now {step.Version}"
             : $"update: did not take: this is {UpdateCheck.CurrentVersion}, not {step.Version}");

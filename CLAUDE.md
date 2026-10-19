@@ -54,7 +54,10 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   `--update-done`, which waits, deletes `update\` and runs as the player with the link. `SelfUpdate.Continue` runs
   first in `Main`, before the instance gate and any window. Each step only moves on (the staged copy acts only from
   `update\`, as the version asked for, and only starts the installed exe; --update-done starts nothing), and only a
-  click starts an update. Steps log to `ytplayer.log` as `update: …`.
+  click starts an update. Steps log to `ytplayer.log` as `update: …`. What the link and the settings do not carry
+  (paused, folded) the old player writes to `resume.json` beside the settings (`ResumeState`), which the new one
+  takes (reads and deletes) only when started with --update-done (`SelfUpdate.Resumed`); compact is the settings'
+  then, not forced on as for a video asked for on the command line. The arguments stay what 0.1.15 sends.
 - Win+/ is a global hotkey (`SdlVulkanWindow.TryRegisterGlobalHotKey`, Windows only): it shows the window if
   hidden, raises it and gives it the keyboard. Ctrl+H, the strip's hide button and `--start-minimised` hide it (`SdlVulkanWindow.Hide`,
   off the taskbar too), but only while Win+/ is ours to bring it back; otherwise they minimize it.
