@@ -383,9 +383,13 @@ await evaluate(`window.__host({ togglePlay: true })`); await sleep(1500);
 await evaluate(`window.__host({ startPaused: true })`); await sleep(1500);
 s = await state();
 check('update: {startPaused} pauses the video once it plays', s.video?.paused === true, s.video);
+// YouTube plays it again on its own (signed in, at the watch history's time): it stays paused.
+await evaluate(`document.querySelector('#movie_player video').play()`); await sleep(1500);
+s = await state();
+check("update: a play that is YouTube's, not the viewer's, is paused again", s.video?.paused === true, s.video);
 await evaluate(`window.__host({ togglePlay: true })`); await sleep(1500);
 s = await state();
-check('update: and only once', s.video?.paused === false, s.video);
+check("update: the viewer's play (the strip's button) ends the hold", s.video?.paused === false, s.video);
 
 // 13. Ctrl+Q over a thumbnail YouTube's hover preview covers (a search's results): the preview player is not in the
 // tile, and the video under it is still the one queued.

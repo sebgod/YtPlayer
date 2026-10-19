@@ -637,6 +637,8 @@
       if (d && d.search) startSearch();
       if (d && d.copyLink) copyLink(d.copyLink === 'time');
       // From a key (the strip's Ctrl+P) it says what it did; from the strip's button, which shows it, not.
+      // The strip's buttons and the media keys are the viewer's: a play from them ends a {startPaused} hold.
+      if (d && (d.togglePlay || d.next || d.previous || d.mediaAction)) playByViewer();
       if (d && d.togglePlay) togglePlay(d.togglePlay === 'key');
       if (d && d.next) playNext();
       if (d && d.previous) playPrevious();
@@ -661,19 +663,29 @@
     // A new video in the player says so here too, should YouTube set the session's metadata before the player's.
     reportMedia();
   }
-  // Back from an update that left the video paused ({startPaused}): the video, not an ad before it, is paused as it
-  // starts, once; YouTube autoplays a video it opens.
+  // Back from an update that left the video paused ({startPaused}): the video, not an ad before it, stays paused as
+  // it starts. YouTube autoplays a video it opens, and may play it again after a pause: signed in, it seeks to where
+  // the watch history left off and plays from there. So every start of the video is paused, until the viewer plays
+  // it (a click or a key in the page, the strip, the media keys: playByViewer) or the hold runs out, 15 s after the
+  // video was first paused.
   var startPaused = false;
+  var holdUntil = 0;
   function pauseIfAsked() {
     var v = document.querySelector('#movie_player video');
     if (!startPaused || !v || v.paused || document.querySelector('#movie_player.ad-showing')) return;
-    startPaused = false;
+    if (holdUntil && Date.now() > holdUntil) { startPaused = false; return; }
+    if (!holdUntil) holdUntil = Date.now() + 15000;
     v.pause();
   }
   function pauseOnStart() {
     startPaused = true;
+    holdUntil = 0;
     pauseIfAsked();
   }
+  function playByViewer() { startPaused = false; }
+  ['pointerdown', 'keydown'].forEach(function (type) {
+    document.addEventListener(type, function (e) { if (e.isTrusted) playByViewer(); }, true);
+  });
   document.addEventListener('playing', pauseIfAsked, true);
   ['playing', 'pause', 'ended', 'emptied'].forEach(function (type) {
     document.addEventListener(type, reportPlaying, true);
