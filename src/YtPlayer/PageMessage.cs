@@ -13,14 +13,15 @@ namespace YtPlayer;
 /// queue the one whose link is on the clipboard), <c>media</c> (the track YouTube gave the page's media session,
 /// for the window's entry in the system's media controls, or null when it took it away: read as
 /// <see cref="MediaGone"/>), <c>help</c> (F1: open or close the help panel, which the host fills in),
-/// <c>update</c> (the help panel's update button, with <c>resume</c>, the link to what plays, to open again after it),
+/// <c>update</c> (the help panel's update button, with <c>resume</c>, the link to what plays, to open again after it,
+/// and <c>paused</c>, whether it was paused),
 /// <c>openRelease</c> (the help panel's link to a newer release, which the host opens in the
 /// default browser: the page names no address, so only the release the host found is ever opened).</summary>
 internal readonly record struct PageMessage(
     bool Ready, bool? Showing, string? Paste, string? Copy = null, (double X, double Y)? SkipAt = null,
     bool? Playing = null, bool? Ad = null, bool Hide = false, bool? Collapse = null, bool QueueClipboard = false,
     PageTrack? Media = null, bool MediaGone = false, bool Help = false, bool OpenRelease = false,
-    bool Update = false, string? Resume = null)
+    bool Update = false, string? Resume = null, bool ResumePaused = false)
 {
     /// <summary>Reads <paramref name="json"/>; anything that is not one of ours reads as empty.</summary>
     public static PageMessage Parse(string json)
@@ -61,7 +62,8 @@ internal readonly record struct PageMessage(
                 Update: root.TryGetProperty("update", out var update) && update.ValueKind == JsonValueKind.True,
                 Resume: root.TryGetProperty("resume", out var resume) && resume.ValueKind == JsonValueKind.String
                     ? resume.GetString()
-                    : null);
+                    : null,
+                ResumePaused: root.TryGetProperty("paused", out var paused) && paused.ValueKind == JsonValueKind.True);
         }
         catch (JsonException)
         {

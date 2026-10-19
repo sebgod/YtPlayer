@@ -57,8 +57,14 @@ internal static class Program
         if (shortcut is not (StartMenuShortcut.Present or StartMenuShortcut.None))
             PlayerLog.Write($"the Start menu shortcut: {shortcut}");
         var startUrl = YouTubeUrl.ToStartUrl(input);
-        // A video asked for on the command line opens compact; otherwise the last mode is kept.
-        var compact = YouTubeUrl.TryGetVideoId(input ?? "", out _, out _) || (input is null && settings.Compact);
+        // Back from updating itself (SelfUpdate), the player takes up where the old version left off: the video it
+        // handed over, and what its settings do not keep (paused, folded).
+        var resume = SelfUpdate.Resumed ? ResumeState.Take() : null;
+        // A video asked for on the command line opens compact; otherwise the last mode is kept. The video an update
+        // hands over is no ask: compact stays as it was.
+        var compact = SelfUpdate.Resumed
+            ? settings.Compact
+            : YouTubeUrl.TryGetVideoId(input ?? "", out _, out _) || (input is null && settings.Compact);
         var onTop = settings.OnTop;
         // The latest release the last update check found (only one of ours: a settings file is no place to take an
         // address to open from). Asked again at start once it is a day old, and whenever the help panel opens.
@@ -227,6 +233,10 @@ internal static class Program
             if (message.Ready)
             {
                 pageReady = true;
+                // Paused when the old version updated: the page pauses the video once it starts (the first page only).
+                if (resume is { Paused: true })
+                    web.PostMessage("""{"startPaused":true}""");
+                resume = resume is null ? null : resume with { Paused = false };
                 SetFullscreen(false);
                 web.PostMessage(CompactMessage(compact));
             }
@@ -269,7 +279,7 @@ internal static class Program
             if (message.OpenRelease && UpdateAvailable() && !OpenURL(latest!.Url))
                 PlayerLog.Write($"the release page did not open: {GetError()}");
             if (message.Update)
-                StartUpdate(YouTubeUrl.FromPastedLink(message.Resume));
+                StartUpdate(YouTubeUrl.FromPastedLink(message.Resume), message.ResumePaused);
         });
         web.TitleChanged += title => UiQueue.Enqueue(() =>
         {
@@ -323,7 +333,7 @@ internal static class Program
         // The help panel's update button: the newer release downloaded and checked into update\ beside the exe, then
         // handed over to (SelfUpdate). The window goes out of sight at once and the player quits as usual; the next
         // window is the new version's, with what was playing. Until the download is done, the player plays on.
-        void StartUpdate(string? resume)
+        void StartUpdate(string? link, bool paused)
         {
             if (installed is null || updating)
                 return;
@@ -334,7 +344,10 @@ internal static class Program
             {
                 updating = false;
                 var staged = t.IsCompletedSuccessfully ? t.Result : null;
-                if (staged is not null && SelfUpdate.StartStaged(staged, resume))
+                // What the new version takes up that the link and the settings do not carry.
+                if (staged is { Exe: not null })
+                    new ResumeState { Paused = paused, Collapsed = collapsed }.Save();
+                if (staged is not null && SelfUpdate.StartStaged(staged, link))
                 {
                     window.Hide();
                     PushQuit();
@@ -619,6 +632,10 @@ internal static class Program
         // YouTube's own handlers first.
         if (media is not null)
             loop.OnMediaButton = button => web.PostMessage(MediaActionMessage(button));
+
+        // Folded when the old version updated: folded again, the page loading behind the strip.
+        if (resume is { Collapsed: true })
+            SetCollapsed(true);
 
         loop.Run();
 

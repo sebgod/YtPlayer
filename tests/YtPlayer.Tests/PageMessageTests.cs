@@ -18,6 +18,9 @@ public class PageMessageTests
         var message = PageMessage.Parse("""{"update":true,"resume":"https://youtu.be/dQw4w9WgXcQ?t=83"}""");
         message.Update.ShouldBeTrue();
         message.Resume.ShouldBe("https://youtu.be/dQw4w9WgXcQ?t=83");
+        message.ResumePaused.ShouldBeFalse();
+        PageMessage.Parse("""{"update":true,"resume":"https://youtu.be/dQw4w9WgXcQ","paused":true}""").ResumePaused
+            .ShouldBeTrue();
     }
 
     [Fact]

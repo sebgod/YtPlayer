@@ -368,6 +368,25 @@ await evaluate(helpFor(true, null, 'current')); await sleep(200);
 await evaluate(helpFor(true, null, 'current')); await sleep(200);
 check('help: {help} again closes it', !(await evaluate(`!!document.getElementById('ytpip-help')`)));
 
+// 12. Self-update keeps the video's pause: the panel's update button says whether it was paused, and back from the
+// update the host's {startPaused} pauses the video as it starts.
+await send('Page.navigate', { url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' });
+await waitFor('Page.loadEventFired'); await sleep(6000);
+await evaluate(`window.__posted.length = 0; document.querySelector('#movie_player video')?.pause()`); await sleep(300);
+await evaluate(helpFor(true, '0.1.99', 'newer').replace('summon: true', 'summon: true, canUpdate: true')); await sleep(300);
+await evaluate(`[...document.querySelectorAll('#ytpip-help .ytpip-help-newer')].find(b => /^Update to/.test(b.textContent))?.click()`); await sleep(200);
+s = await state();
+check("update: the panel's button says what plays and that it is paused",
+  s.posted.some(m => m.update === true && m.paused === true && /^https:\/\/youtu\.be\/jNQXAC9IVRw/.test(m.resume ?? '')), s.posted);
+await press('Escape', 'Escape', 27);
+await evaluate(`window.__host({ togglePlay: true })`); await sleep(1500);
+await evaluate(`window.__host({ startPaused: true })`); await sleep(1500);
+s = await state();
+check('update: {startPaused} pauses the video once it plays', s.video?.paused === true, s.video);
+await evaluate(`window.__host({ togglePlay: true })`); await sleep(1500);
+s = await state();
+check('update: and only once', s.video?.paused === false, s.video);
+
 ws.close(); proc.kill();
 console.log(failures ? `${failures} FAILED` : 'ALL PASSED');
 process.exit(failures ? 1 : 0);
