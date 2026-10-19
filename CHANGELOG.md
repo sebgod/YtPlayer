@@ -3,7 +3,7 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
-## Unreleased
+## 0.1.17 (2026-10-19)
 
 - **Ctrl+Q over a thumbnail queues its video** in a search's results and the home feed too. A moment over a thumbnail
   there, YouTube plays a preview over it, and Ctrl+Q found the preview rather than the video; it worked only over
