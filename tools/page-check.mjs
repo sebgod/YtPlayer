@@ -342,6 +342,32 @@ check('home: YouTube\'s home, within the page', s.path === '/' && !s.compact && 
 check('home: the video plays on', s.video && !s.video.paused, { video: s.video, mini: s.mini });
 check('home: the window takes its browse size (showing:false)', s.posted.some(m => m.showing === false), s.posted);
 
+// 11. The help panel (the strip's ? and F1): the host's {help} opens it with the version and the keys, the update
+// check's answer reaches it while it is open, its link asks the host for the release, Escape closes it, a closed one
+// stays closed on news, F1 asks the host for it, and {help} again closes it.
+const helpFor = (open, newer, update) => `window.__host({ help: { open: ${open}, version: '0.1.12', newer: ${newer ? `'${newer}'` : 'null'}, update: '${update}', summon: true } })`;
+await evaluate(`window.__posted.length = 0; ${helpFor(true, null, 'checking')}`); await sleep(300);
+const helpText = await evaluate(`document.getElementById('ytpip-help')?.innerText ?? null`);
+check('help: {help} opens the panel with the version and the keys',
+  !!helpText && helpText.includes('YtPlayer 0.1.12') && helpText.includes('Ctrl+L') && helpText.includes('Win+/') && /Looking for a newer/.test(helpText), helpText);
+await evaluate(helpFor(false, '0.1.13', 'newer')); await sleep(200);
+check("help: the update check's answer reaches the open panel",
+  /0\.1\.13 is out/.test(await evaluate(`document.querySelector('#ytpip-help .ytpip-help-newer')?.textContent ?? ''`)));
+await evaluate(`document.querySelector('#ytpip-help .ytpip-help-newer')?.click()`); await sleep(100);
+s = await state();
+check('help: its link asks the host for the release', s.posted.some(m => m.openRelease === true), s.posted);
+await press('Escape', 'Escape', 27); await sleep(200);
+check('help: Escape closes it', !(await evaluate(`!!document.getElementById('ytpip-help')`)));
+await evaluate(helpFor(false, null, 'current')); await sleep(200);
+check('help: news does not open a closed panel', !(await evaluate(`!!document.getElementById('ytpip-help')`)));
+await evaluate(`window.__posted.length = 0`);
+await press('F1', 'F1', 112); await sleep(200);
+s = await state();
+check('help: F1 asks the host for it', s.posted.some(m => m.help === true), s.posted);
+await evaluate(helpFor(true, null, 'current')); await sleep(200);
+await evaluate(helpFor(true, null, 'current')); await sleep(200);
+check('help: {help} again closes it', !(await evaluate(`!!document.getElementById('ytpip-help')`)));
+
 ws.close(); proc.kill();
 console.log(failures ? `${failures} FAILED` : 'ALL PASSED');
 process.exit(failures ? 1 : 0);

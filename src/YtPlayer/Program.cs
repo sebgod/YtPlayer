@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
 using DIR.Lib;
 using SdlVulkan.Renderer;
 using SdlVulkan.Renderer.WebView;
@@ -13,7 +15,8 @@ namespace YtPlayer;
 /// <summary>
 /// A picture-in-picture YouTube player: a small borderless window that stays on top, showing YouTube
 /// in the platform's web view (WebView2 on Windows, WebKitGTK on Linux) under a thin strip that drags
-/// the window and holds its buttons: back, play/pause, next, collapse, compact (the video alone), stay on top, close.
+/// the window and holds its buttons: back, play/pause, next, collapse, compact (the video alone), stay on top, help,
+/// close.
 /// </summary>
 /// <remarks>Usage: <c>ytplayer [--start-minimised] [video URL | video id | search words]</c>. With a player already
 /// running, it gets the video or search instead, and comes forward.</remarks>
@@ -53,6 +56,16 @@ internal static class Program
         // A video asked for on the command line opens compact; otherwise the last mode is kept.
         var compact = YouTubeUrl.TryGetVideoId(input ?? "", out _, out _) || (input is null && settings.Compact);
         var onTop = settings.OnTop;
+        // The latest release the last update check found (only one of ours: a settings file is no place to take an
+        // address to open from). Asked again at start once it is a day old, and whenever the help panel opens.
+        var latest = settings is { LatestVersion: { } lv, LatestUrl: { } lu }
+                     && lu.StartsWith(UpdateCheck.ReleasesPage, StringComparison.Ordinal)
+            ? new Release(lv, lu)
+            : null;
+        var updateCheckedAt = settings.UpdateCheckedAt;
+        var checkingUpdate = false;
+        var updateFailed = false;
+        bool UpdateAvailable() => latest is { } release && UpdateCheck.IsNewer(UpdateCheck.CurrentVersion, release.Version);
 
         using var app = SdlVulkanApp.Create();
         // SDL drops the click that activates a window by default, so on an inactive window the first
@@ -174,7 +187,7 @@ internal static class Program
         // The strip and border light up while the window is the active one (read in OnLoopIteration).
         var active = false;
         ChromeState State() => new(fullscreen ? PipMode.Fullscreen : collapsed ? PipMode.Collapsed : PipMode.Normal,
-            active, compact, showing, onTop, playing, stripTitle);
+            active, compact, showing, onTop, playing, stripTitle, UpdateAvailable());
         // The page goes where the chrome's tree puts it, in pixels. Collapsed, it is hidden, with nowhere to go.
         void PlaceWebView()
         {
@@ -233,6 +246,11 @@ internal static class Program
                 SetCollapsed(fold);
             if (message.QueueClipboard)
                 QueueFromClipboard(web);
+            if (message.Help)
+                ShowHelp();
+            // Only the release the check found, whatever the page asks.
+            if (message.OpenRelease && UpdateAvailable() && !OpenURL(latest!.Url))
+                PlayerLog.Write($"the release page did not open: {GetError()}");
         });
         web.TitleChanged += title => UiQueue.Enqueue(() =>
         {
@@ -243,6 +261,43 @@ internal static class Program
         web.AttachToWindow(window);
         PlaceWebView();
         web.Navigate(startUrl);
+
+        // Whether a newer release is out, from GitHub: the help button wears a red dot while one is, and the help
+        // panel says which. The answer goes to the page too, which shows it if the panel is open.
+        void CheckForUpdate()
+        {
+            if (checkingUpdate)
+                return;
+            checkingUpdate = true;
+            UpdateCheck.LatestAsync().ContinueWith(t => UiQueue.Enqueue(() =>
+            {
+                checkingUpdate = false;
+                var found = t.IsCompletedSuccessfully ? t.Result : null;
+                updateFailed = found is null;
+                if (found is not null)
+                {
+                    latest = found;
+                    updateCheckedAt = DateTimeOffset.Now;
+                }
+                web.PostMessage(HelpNow(open: false));
+            }), TaskScheduler.Default);
+        }
+        if (updateCheckedAt is not { } checkedAt || DateTimeOffset.Now - checkedAt > UpdateCheck.Fresh)
+            CheckForUpdate();
+
+        // The strip's help button and F1: the help panel, in the page (the keys, the version, and whether a newer one
+        // is out), or closed if it is open. Folded, the window unfolds to show it.
+        void ShowHelp()
+        {
+            SetCollapsed(false);
+            CheckForUpdate();
+            web.PostMessage(HelpNow(open: true));
+        }
+        string HelpNow(bool open)
+            => HelpMessage(open, UpdateCheck.CurrentVersion,
+                UpdateAvailable() ? latest!.Version : null,
+                UpdateAvailable() ? "newer" : checkingUpdate ? "checking" : updateFailed ? "unknown" : "current",
+                summonable);
 
         // Ctrl+H and the strip's hide button: out of sight, off the taskbar and Alt+Tab too, the video playing on;
         // Win+/ brings it back, as does launching it again. With no Win+/ to do that, it is only minimized.
@@ -369,6 +424,10 @@ internal static class Program
                     case (InputModifier.Shift, InputKey.P):
                         web.PostMessage("""{"previous":true}""");
                         return true;
+                    case (InputModifier.None, InputKey.F1):
+                        ShowHelp();
+                        web.Focus();
+                        return true;
                     default:
                         return false;
                 }
@@ -414,6 +473,9 @@ internal static class Program
                 case PipButton.Pin:
                     onTop = !onTop;
                     window.SetAlwaysOnTop(onTop);
+                    break;
+                case PipButton.Help:
+                    ShowHelp();
                     break;
                 case PipButton.Hide:
                     Hide();
@@ -528,6 +590,7 @@ internal static class Program
             PipWidth = pipSize.Item1, PipHeight = pipSize.Item2,
             BrowseWidth = browseSize.Item1, BrowseHeight = browseSize.Item2,
             OnTop = onTop, Compact = compact,
+            LatestVersion = latest?.Version, LatestUrl = latest?.Url, UpdateCheckedAt = updateCheckedAt,
         }.Save();
 
         web.Dispose();
@@ -569,6 +632,29 @@ internal static class Program
     {
         if (YouTubeUrl.FromPastedLink(pasted) is { } url)
             web.Navigate(url);
+    }
+
+    // {help}: open (or close) the panel, or, with open false, bring an open one up to date. newer is the release that
+    // is out, update what the panel says of it (newer, checking, current, unknown), summon whether Win+/ is ours.
+    internal static string HelpMessage(bool open, string version, string? newer, string update, bool summon)
+    {
+        var buffer = new MemoryStream();
+        using (var json = new Utf8JsonWriter(buffer))
+        {
+            json.WriteStartObject();
+            json.WriteStartObject("help");
+            json.WriteBoolean("open", open);
+            json.WriteString("version", version);
+            if (newer is null)
+                json.WriteNull("newer");
+            else
+                json.WriteString("newer", newer);
+            json.WriteString("update", update);
+            json.WriteBoolean("summon", summon);
+            json.WriteEndObject();
+            json.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
     }
 
     private static string CompactMessage(bool compact) => compact ? """{"compact":true}""" : """{"compact":false}""";

@@ -5,7 +5,7 @@ using Layout = DIR.Lib.Layout;
 
 namespace YtPlayer;
 
-public enum PipButton { Back, Home, Previous, PlayPause, Next, Collapse, Compact, Pin, Hide, Fullscreen, Close }
+public enum PipButton { Back, Home, Previous, PlayPause, Next, Collapse, Compact, Pin, Help, Hide, Fullscreen, Close }
 
 /// <summary>How the window shows the page.</summary>
 internal enum PipMode
@@ -30,8 +30,9 @@ internal enum PipMode
 /// <param name="OnTop">The window stays on top.</param>
 /// <param name="Playing">The player's video is playing.</param>
 /// <param name="Title">The page's title, for the strip; null shows none.</param>
+/// <param name="Update">A newer release is out (UpdateCheck): the help button says so.</param>
 internal readonly record struct ChromeState(PipMode Mode, bool Active, bool Compact, bool Showing, bool OnTop,
-    bool Playing, string? Title);
+    bool Playing, string? Title, bool Update = false);
 
 /// <summary>What a press on the window's frame does, for SDL's hit test: the strip drags the window, the border
 /// resizes it from an edge or a corner.</summary>
@@ -39,7 +40,7 @@ internal sealed record FrameHit(HitTestResult Area) : HitResult;
 
 /// <summary>
 /// Everything the window shows besides the page: the strip along the top (back and home, then previous,
-/// play/pause and next, the title, collapse, compact, stay on top, hide, fullscreen, close) and the border around
+/// play/pause and next, the title, collapse, compact, stay on top, help, hide, fullscreen, close) and the border around
 /// the page, as one <see cref="Layout.Node"/> tree.
 /// Its sizes are design units, which the measure context maps to pixels at <see cref="PixelWidgetBase{TSurface}.DpiScale"/>
 /// (the display's, which the host sets). The painter draws the tree and binds each button's press to the rect it
@@ -66,7 +67,7 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
     // Design units, mapped to pixels by the measure context.
     private const float StripHeight = 28;
     private const float Border = 4;
-    // Eleven of them and the gap between the groups fit the narrowest window (WindowFit.PipMinimum).
+    // Twelve of them and the gap between the groups fit the narrowest window (WindowFit.PipMinimum).
     private const float ButtonWidth = 28;
     // Between the page's buttons (back, home) and the video's (previous, play/pause, next).
     private const float GroupGap = 6;
@@ -85,6 +86,7 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
     private const string HomeMark = "home";
     private const string CompactMark = "compact";
     private const string PinMark = "pin";
+    private const string HelpMark = "help";
     private const string HideMark = "hide";
     private const string FullscreenMark = "fullscreen";
     private const string CloseMark = "close";
@@ -177,6 +179,7 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
                     state.Mode == PipMode.Collapsed ? Layout.IconKind.CaretDown : Layout.IconKind.CaretUp, 8, Ink)),
                 Button(PipButton.Compact, B.Fill(13, MarkSize, CompactMark)),
                 Button(PipButton.Pin, B.Fill(8, 8, PinMark)),
+                Button(PipButton.Help, B.Fill(MarkSize, MarkSize, HelpMark)),
                 Button(PipButton.Hide, B.Fill(MarkSize, MarkSize, HideMark)),
                 .. CanFullscreen
                     ? new[] { Button(PipButton.Fullscreen, B.Fill(MarkSize, MarkSize, FullscreenMark)) }
@@ -193,7 +196,7 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
             .BgHover(button == PipButton.Close ? CloseHover : Hover)
             .Clickable(new HitResult.ButtonHit(button.ToString()), _ => Pressed?.Invoke(button));
 
-    // The page's title, cut to an ellipsis to fit, between the five buttons on the left and the six on the right
+    // The page's title, cut to an ellipsis to fit, between the five buttons on the left and the seven on the right
     // (whose room it keeps when there is none).
     private Layout.Node Title(string? title)
         => B.HStack(string.IsNullOrWhiteSpace(title) || FontPath.Length == 0
@@ -285,6 +288,37 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
                 Corner(r.Right, r.Y, right: true, bottom: false);
                 Corner(r.X, r.Bottom, right: false, bottom: true);
                 Corner(r.Right, r.Bottom, right: true, bottom: true);
+                break;
+            }
+            case HelpMark:
+            {
+                // A question mark: a hook, a circle's top half and down its right, then the stem and the dot. With a
+                // newer release out, the red dot of a notification at its top right.
+                var line = stroke;
+                var cx = r.X + r.Width / 2;
+                var radius = r.Width * 0.34f;
+                var cy = r.Y + radius;
+                const int segments = 8;
+                // From the left, over the top, to below the right: y grows downwards.
+                var (from, to) = (MathF.PI, MathF.PI * 2.4f);
+                var (px, py) = (cx + radius * MathF.Cos(from), cy + radius * MathF.Sin(from));
+                for (var i = 1; i <= segments; i++)
+                {
+                    var t = from + (to - from) * i / segments;
+                    var (x, y) = (cx + radius * MathF.Cos(t), cy + radius * MathF.Sin(t));
+                    DrawLine(px, py, x, y, Ink, line);
+                    (px, py) = (x, y);
+                }
+                var stemEnd = r.Y + r.Height * 0.72f;
+                DrawLine(px, py, cx, py + (stemEnd - py) * 0.4f, Ink, line);
+                Renderer.FillRectangle(Pixels(cx - line / 2f, py + (stemEnd - py) * 0.4f, line, stemEnd - py - (stemEnd - py) * 0.4f), Ink);
+                var dot = Math.Max(line, Scale.ToSurface(1.75f));
+                Renderer.FillRectangle(Pixels(cx - dot / 2, r.Bottom - dot, dot, dot), Ink);
+                if (_painted.Update)
+                {
+                    var badge = Scale.ToSurface(4.5f);
+                    FillEllipse(r.Right - badge * 0.25f, r.Y - badge * 0.5f, badge, badge, Accent);
+                }
                 break;
             }
             case HideMark:

@@ -14,12 +14,12 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   X11, the platforms with a web view backend, so the pointer and the hit test land in the tree's pixels as they
   are. The tests paint it into DIR.Lib's `RgbaImageRenderer` and ask the regions.
 - `Scripts/yt-tweaks.js` runs at document start on every page (`INativeWebView.AddScriptAtDocumentStartAsync`):
-  Shorts hiding, the Shorts redirect, compact mode, the hidden miniplayer, ad skipping, and the Ctrl+F,
-  Ctrl+C, Ctrl+Shift+C, Ctrl+P, Ctrl+H, Ctrl+Up/Down, Ctrl+Q, Ctrl+L and Ctrl+V keys. Host and page talk through
-  `chrome.webview` messages: `{ready}`, `{showing}`, `{paste}`, `{copy}`, `{skipAt}`, `{playing}`, `{hide}`,
-  `{collapse}`, `{queueClipboard}`, `{media}` from the page (read by `PageMessage`), `{compact}`, `{search}`,
-  `{copyLink}`, `{togglePlay}`, `{next}`, `{previous}`, `{home}`, `{queue}`, `{listQueue}`, `{mediaAction}` from the
-  host.
+  Shorts hiding, the Shorts redirect, compact mode, the hidden miniplayer, ad skipping, the help panel, and the
+  Ctrl+F, Ctrl+C, Ctrl+Shift+C, Ctrl+P, Ctrl+H, Ctrl+Up/Down, Ctrl+Q, Ctrl+L, Ctrl+V and F1 keys. Host and page talk
+  through `chrome.webview` messages: `{ready}`, `{showing}`, `{paste}`, `{copy}`, `{skipAt}`, `{playing}`, `{hide}`,
+  `{collapse}`, `{queueClipboard}`, `{media}`, `{help}`, `{openRelease}` from the page (read by `PageMessage`),
+  `{compact}`, `{search}`, `{copyLink}`, `{togglePlay}`, `{next}`, `{previous}`, `{home}`, `{queue}`, `{listQueue}`,
+  `{mediaAction}`, `{help}` from the host.
 - Windows' media controls (the flyout, the lock screen, the media keys) show the player's own entry, for its window
   (`SdlVulkanWindow.TryGetMediaControls`, SdlVulkan.Renderer 7.69), named after the app id `AppIdentity.Claim`
   (AppShell 1.2) sets at start, with the Start menu shortcut that carries it. WebView2's own entry is off
@@ -38,6 +38,12 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
 - The queue is YouTube's own: the script adds with the `addToPlaylistCommand` its "Add to queue" sends, run through
   `ytd-app.resolveCommand`, and reads `yt-playlist-manager.getPlaylistData()`. Both are YouTube internals; the
   page check covers them.
+- Help (the strip's `?`, F1) is a panel in the page: the host sends `{help}` (`Program.HelpMessage`: the version,
+  the update check's word, whether Win+/ is ours) and the script draws it, with the list of keys, which is the
+  script's to keep in step with the keys. `UpdateCheck` asks GitHub's `releases/latest` at start once its last answer
+  (kept in settings) is a day old, and each time help opens; a newer release puts a red dot on the `?`
+  (`ChromeState.Update`). The panel's link sends `{openRelease}`, and the host opens the release it found, never an
+  address from the page. It only tells; nothing updates itself.
 - Win+/ is a global hotkey (`SdlVulkanWindow.TryRegisterGlobalHotKey`, Windows only): it shows the window if
   hidden, raises it and gives it the keyboard. Ctrl+H, the strip's hide button and `--start-minimised` hide it (`SdlVulkanWindow.Hide`,
   off the taskbar too), but only while Win+/ is ours to bring it back; otherwise they minimize it.

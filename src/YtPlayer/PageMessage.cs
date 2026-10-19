@@ -12,11 +12,13 @@ namespace YtPlayer;
 /// window to its strip, Ctrl+Down unfolds it), <c>queueClipboard</c> (Ctrl+Q with no video under the pointer:
 /// queue the one whose link is on the clipboard), <c>media</c> (the track YouTube gave the page's media session,
 /// for the window's entry in the system's media controls, or null when it took it away: read as
-/// <see cref="MediaGone"/>).</summary>
+/// <see cref="MediaGone"/>), <c>help</c> (F1: open or close the help panel, which the host fills in),
+/// <c>openRelease</c> (the help panel's link to a newer release, which the host opens in the
+/// default browser: the page names no address, so only the release the host found is ever opened).</summary>
 internal readonly record struct PageMessage(
     bool Ready, bool? Showing, string? Paste, string? Copy = null, (double X, double Y)? SkipAt = null,
     bool? Playing = null, bool? Ad = null, bool Hide = false, bool? Collapse = null, bool QueueClipboard = false,
-    PageTrack? Media = null, bool MediaGone = false)
+    PageTrack? Media = null, bool MediaGone = false, bool Help = false, bool OpenRelease = false)
 {
     /// <summary>Reads <paramref name="json"/>; anything that is not one of ours reads as empty.</summary>
     public static PageMessage Parse(string json)
@@ -51,7 +53,9 @@ internal readonly record struct PageMessage(
                     : null,
                 QueueClipboard: root.TryGetProperty("queueClipboard", out var q) && q.ValueKind == JsonValueKind.True,
                 Media: root.TryGetProperty("media", out var m) ? PageTrack.From(m) : null,
-                MediaGone: root.TryGetProperty("media", out var gone) && gone.ValueKind == JsonValueKind.Null);
+                MediaGone: root.TryGetProperty("media", out var gone) && gone.ValueKind == JsonValueKind.Null,
+                Help: root.TryGetProperty("help", out var help) && help.ValueKind == JsonValueKind.True,
+                OpenRelease: root.TryGetProperty("openRelease", out var release) && release.ValueKind == JsonValueKind.True);
         }
         catch (JsonException)
         {
