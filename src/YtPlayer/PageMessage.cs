@@ -13,12 +13,14 @@ namespace YtPlayer;
 /// queue the one whose link is on the clipboard), <c>media</c> (the track YouTube gave the page's media session,
 /// for the window's entry in the system's media controls, or null when it took it away: read as
 /// <see cref="MediaGone"/>), <c>help</c> (F1: open or close the help panel, which the host fills in),
+/// <c>update</c> (the help panel's update button, with <c>resume</c>, the link to what plays, to open again after it),
 /// <c>openRelease</c> (the help panel's link to a newer release, which the host opens in the
 /// default browser: the page names no address, so only the release the host found is ever opened).</summary>
 internal readonly record struct PageMessage(
     bool Ready, bool? Showing, string? Paste, string? Copy = null, (double X, double Y)? SkipAt = null,
     bool? Playing = null, bool? Ad = null, bool Hide = false, bool? Collapse = null, bool QueueClipboard = false,
-    PageTrack? Media = null, bool MediaGone = false, bool Help = false, bool OpenRelease = false)
+    PageTrack? Media = null, bool MediaGone = false, bool Help = false, bool OpenRelease = false,
+    bool Update = false, string? Resume = null)
 {
     /// <summary>Reads <paramref name="json"/>; anything that is not one of ours reads as empty.</summary>
     public static PageMessage Parse(string json)
@@ -55,7 +57,11 @@ internal readonly record struct PageMessage(
                 Media: root.TryGetProperty("media", out var m) ? PageTrack.From(m) : null,
                 MediaGone: root.TryGetProperty("media", out var gone) && gone.ValueKind == JsonValueKind.Null,
                 Help: root.TryGetProperty("help", out var help) && help.ValueKind == JsonValueKind.True,
-                OpenRelease: root.TryGetProperty("openRelease", out var release) && release.ValueKind == JsonValueKind.True);
+                OpenRelease: root.TryGetProperty("openRelease", out var release) && release.ValueKind == JsonValueKind.True,
+                Update: root.TryGetProperty("update", out var update) && update.ValueKind == JsonValueKind.True,
+                Resume: root.TryGetProperty("resume", out var resume) && resume.ValueKind == JsonValueKind.String
+                    ? resume.GetString()
+                    : null);
         }
         catch (JsonException)
         {

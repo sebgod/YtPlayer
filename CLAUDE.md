@@ -43,7 +43,17 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   script's to keep in step with the keys. `UpdateCheck` asks GitHub's `releases/latest` at start once its last answer
   (kept in settings) is a day old, and each time help opens; a newer release puts a red dot on the `?`
   (`ChromeState.Update`). The panel's link sends `{openRelease}`, and the host opens the release it found, never an
-  address from the page. It only tells; nothing updates itself.
+  address from the page.
+- A release build updates itself from the panel (`SelfUpdate`): the release workflow writes a `VERSION` marker
+  (`<version> <rid>`, then the release's files) into each zip, and only a build with the marker for its own version
+  offers it; one from source only links to the release. The player downloads the rid's zip into `update\` beside the
+  exe, checks it against the asset's GitHub `digest` (SHA-256), and unpacks it; then `update\ytplayer.exe
+  --update-from <pid> <version> [link]` waits for the player to exit, copies its files over the install, deletes the
+  files the old marker lists and the new one does not (nothing else), and starts the installed exe with
+  `--update-done`, which waits, deletes `update\` and runs as the player with the link. `SelfUpdate.Continue` runs
+  first in `Main`, before the instance gate and any window. Each step only moves on (the staged copy acts only from
+  `update\`, as the version asked for, and only starts the installed exe; --update-done starts nothing), and only a
+  click starts an update. Steps log to `ytplayer.log` as `update: …`.
 - Win+/ is a global hotkey (`SdlVulkanWindow.TryRegisterGlobalHotKey`, Windows only): it shows the window if
   hidden, raises it and gives it the keyboard. Ctrl+H, the strip's hide button and `--start-minimised` hide it (`SdlVulkanWindow.Hide`,
   off the taskbar too), but only while Win+/ is ours to bring it back; otherwise they minimize it.

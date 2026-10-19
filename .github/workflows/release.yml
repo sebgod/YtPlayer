@@ -83,6 +83,12 @@ jobs:
           $name = "ytplayer-$env:VERSION-${{ matrix.rid }}"
           New-Item -ItemType Directory dist | Out-Null
           Copy-Item LICENSE publish/
+          # The marker that makes this a release build, one that updates itself (SelfUpdate.cs): the version and
+          # the runtime, then the release's files, so that an update deletes only what a release put there.
+          # (-File and -Exclude together find nothing, so the symbols are filtered out after.)
+          $files = @((Get-ChildItem publish -File | Where-Object Extension -ne '.pdb').Name) + 'VERSION' | Sort-Object -Unique
+          Set-Content publish/VERSION -Value (@("$env:VERSION ${{ matrix.rid }}") + $files)
+          Get-Content publish/VERSION
           Compress-Archive -Path (Get-ChildItem publish -Exclude *.pdb).FullName -DestinationPath "dist/$name.zip"
           Compress-Archive -Path (Get-ChildItem publish -Filter *.pdb).FullName -DestinationPath "dist/$name-symbols.zip"
           Get-ChildItem publish, dist | Format-Table Name, Length

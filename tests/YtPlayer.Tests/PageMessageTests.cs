@@ -13,6 +13,14 @@ public class PageMessageTests
         => PageMessage.Parse("""{"openRelease":true}""").ShouldBe(new PageMessage(false, null, null, OpenRelease: true));
 
     [Fact]
+    public void TheUpdateButtonCarriesWhatPlays()
+    {
+        var message = PageMessage.Parse("""{"update":true,"resume":"https://youtu.be/dQw4w9WgXcQ?t=83"}""");
+        message.Update.ShouldBeTrue();
+        message.Resume.ShouldBe("https://youtu.be/dQw4w9WgXcQ?t=83");
+    }
+
+    [Fact]
     public void ReadyAsksForTheCompactState()
         => PageMessage.Parse("""{"ready":true}""").ShouldBe(new PageMessage(true, null, null));
 
