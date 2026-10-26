@@ -3,7 +3,7 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
-## Unreleased
+## 0.1.19 (2026-10-26)
 
 - **The log says when the player starts and why it stops**: the strip's close button, an update, a quit from
   outside (Alt+F4, the taskbar, Windows), or the GPU given up on by the renderer, which until now ended the player
