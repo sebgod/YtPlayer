@@ -50,6 +50,9 @@ internal static class Program
         using var gate = InstanceGate.TryClaim(channel);
         if (gate is null && (startHidden || InstanceGate.TryHandOff(channel, input ?? "", TimeSpan.FromSeconds(2))))
             return 0;
+        // The player's start and its end (after loop.Run, with why) bracket a run in the log: a start with no end
+        // after it is a player that died without a word, a crash the handler above could not see or a kill.
+        PlayerLog.Write($"started {UpdateCheck.CurrentVersion} (pid {Environment.ProcessId})");
         // Before the first window, which takes the process's app id when it is made: Windows names the player's
         // media session (and its taskbar button) after the Start menu shortcut that carries the same id, written here
         // the first time (Windows only; AppShell's).
@@ -211,6 +214,9 @@ internal static class Program
             web.SetBounds(chrome.WebViewBounds(State(), w, h));
         }
         var adLog = new AdLog();
+        // Why the loop stopped, for the log: the player's own quits say so; anything else is a quit from outside or
+        // the GPU given up on (OnQuit, OnGpuWedged).
+        string? stopReason = null;
         // The page has said {ready}: WebView2 takes no message before its first navigation, and throws. What the host
         // tells the page unasked (the update check's answer, which can come back first) waits for it.
         var pageReady = false;
@@ -350,6 +356,7 @@ internal static class Program
                 if (staged is not null && SelfUpdate.StartStaged(staged, link))
                 {
                     window.Hide();
+                    stopReason = $"to update to {staged.Version}";
                     PushQuit();
                     return;
                 }
@@ -551,6 +558,7 @@ internal static class Program
                             CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
                     break;
                 case PipButton.Close:
+                    stopReason = "the strip's close button";
                     PushQuit();
                     return;
             }
@@ -637,7 +645,18 @@ internal static class Program
         if (resume is { Collapsed: true })
             SetCollapsed(true);
 
+        // A quit the player did not ask for: Alt+F4, the taskbar's close, Windows signing out or shutting down.
+        loop.OnQuit = () =>
+        {
+            stopReason ??= "asked to quit from outside (Alt+F4, the taskbar, Windows)";
+            return false;
+        };
+        // The GPU stopped answering and the renderer gave up on it, which stops the loop as a quit does.
+        loop.OnGpuWedged = () => stopReason = "the GPU stopped responding (the renderer gave up on it)";
+        loop.OnRenderDegraded = () => PlayerLog.Write("the GPU had to recover several times in quick succession");
+
         loop.Run();
+        PlayerLog.Write($"exiting: {stopReason ?? "the event loop stopped, for no reason it gave"}");
 
         // Fullscreen, the window's place and size are the display's; the ones to remember are those it goes back to.
         SetFullscreen(false);
