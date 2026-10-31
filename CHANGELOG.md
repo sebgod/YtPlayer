@@ -3,6 +3,16 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
+## Unreleased
+
+- **The log says what the GPU did**: which one the renderer chose, any frame that took the GPU over its budget,
+  and a fence that ran late or a device that was lost. The Adreno X1-85 has hung (Windows' GPU timeout) about twice a
+  week since June, and nothing logged could say whether a frame of the player's ran long first.
+- **SdlVulkan.Renderer 7.78** (from 7.72): the renderer waits for the GPU before it destroys its pipelines when the
+  player closes, where it destroyed them under a frame still in flight (Vulkan's validation layer reported it at every
+  exit). 7.77 also lets `SDLVK_VALIDATION=1` turn the validation layer on in this Release build, with the Vulkan SDK
+  installed.
+
 ## 0.1.19 (2026-10-26)
 
 - **The log says when the player starts and why it stops**: the strip's close button, an update, a quit from
