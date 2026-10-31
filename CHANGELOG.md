@@ -3,7 +3,7 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
-## Unreleased
+## 0.1.20 (2026-10-31)
 
 - **The log says what the GPU did**: which one the renderer chose, any frame that took the GPU over its budget,
   and a fence that ran late or a device that was lost. The Adreno X1-85 has hung (Windows' GPU timeout) about twice a
