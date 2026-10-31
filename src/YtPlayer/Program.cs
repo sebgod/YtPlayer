@@ -53,6 +53,9 @@ internal static class Program
         // The player's start and its end (after loop.Run, with why) bracket a run in the log: a start with no end
         // after it is a player that died without a word, a crash the handler above could not see or a kill.
         PlayerLog.Write($"started {UpdateCheck.CurrentVersion} (pid {Environment.ProcessId})");
+        // Before the renderer's first line: its warnings (a GPU frame over budget, a stuck fence, a lost device) and
+        // the GPU it chose go into the log too, so a hang after them is not the first the log hears of it.
+        SdlVulkanLog.Logger = new RendererLog(SdlVulkanLog.Logger, PlayerLog.Write);
         // Before the first window, which takes the process's app id when it is made: Windows names the player's
         // media session (and its taskbar button) after the Start menu shortcut that carries the same id, written here
         // the first time (Windows only; AppShell's).

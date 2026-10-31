@@ -4,8 +4,8 @@
     <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="SdlVulkan.Renderer" Version="7.72.*" />
-    <PackageVersion Include="SdlVulkan.Renderer.WebView" Version="7.72.*" />
+    <PackageVersion Include="SdlVulkan.Renderer" Version="7.78.*" />
+    <PackageVersion Include="SdlVulkan.Renderer.WebView" Version="7.78.*" />
     <PackageVersion Include="SDL3-CS" Version="3.5.0-preview.20260213-150035" />
     <PackageVersion Include="SDL3-CS.Native" Version="3.5.0-preview.20260205-174353" />
     <PackageVersion Include="xunit.v3" Version="4.0.1" />
