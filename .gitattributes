@@ -1,3 +1,6 @@
+# Text files are LF in the repo and on disk, whatever core.autocrlf says; git converts on add.
+* text=auto eol=lf
+
 # Raw pixels: never touched by line-ending conversion.
 *.rgba binary
 *.ico binary
