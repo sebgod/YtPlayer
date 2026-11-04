@@ -3,6 +3,12 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
+## Unreleased
+
+- **The log says how long the player took to stop**, after its `exiting` line: a close that felt slow shows whether
+  the player's way out was (saving the settings, closing the web view and the GPU), and an `exiting` with no
+  `stopped` after it is a player that hung or died on the way out.
+
 ## 0.1.20 (2026-10-31)
 
 - **The log says what the GPU did**: which one the renderer chose, any frame that took the GPU over its budget,

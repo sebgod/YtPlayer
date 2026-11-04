@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -660,6 +661,9 @@ internal static class Program
 
         loop.Run();
         PlayerLog.Write($"exiting: {stopReason ?? "the event loop stopped, for no reason it gave"}");
+        // How long the way out takes (the settings, the web view, the GPU), for a close that felt slow: an
+        // "exiting" with no "stopped" after it is a player that hung or died on the way out.
+        var stopping = Stopwatch.StartNew();
 
         // Fullscreen, the window's place and size are the display's; the ones to remember are those it goes back to.
         SetFullscreen(false);
@@ -682,6 +686,7 @@ internal static class Program
         renderer.Dispose();
         context.Dispose();
         window.Dispose();
+        PlayerLog.Write($"stopped after {stopping.Elapsed.TotalSeconds:0.0} s");
         return 0;
     }
 
