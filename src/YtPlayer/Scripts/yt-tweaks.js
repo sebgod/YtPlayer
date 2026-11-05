@@ -35,6 +35,11 @@
     'html.ytpip-compact, html.ytpip-compact body { overflow: hidden !important; background: #000 !important; }\n' +
     'html.ytpip-compact #movie_player { position: fixed !important; inset: 0 !important;' +
     ' width: 100vw !important; height: 100vh !important; z-index: 2147483000 !important; background: #000 !important; }\n' +
+    // That z-index counts only up to the nearest stacking context above the player. Since November 2026
+    // YouTube names its player container for view transitions (view-transition-name: player-resize), which
+    // makes it one, and the title, channel and like row (#below, named too) and the related videos then
+    // paint over the player. Without the names there is no such context between the player and the page.
+    'html.ytpip-compact :has(#movie_player) { view-transition-name: none !important; }\n' +
     'html.ytpip-compact #masthead-container, html.ytpip-compact ytd-mini-guide-renderer,' +
     ' html.ytpip-compact tp-yt-app-drawer { display: none !important; }\n' +
     // End-screen cards and the "more videos" strip cover most of a small window.

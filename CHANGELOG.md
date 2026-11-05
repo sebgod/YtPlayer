@@ -5,6 +5,10 @@ What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
 ## Unreleased
 
+- **Compact mode covers the whole page again**: in a wide window the video's title, channel and like row, and the
+  related videos, drew over the compact player and its controls. YouTube now names its player container for view
+  transitions, which made that container a stacking context of its own, so the player's place above the page no
+  longer reached past it. Compact clears those names; the page check now looks at a wide window as well.
 - **The log says how long the player took to stop**, after its `exiting` line: a close that felt slow shows whether
   the player's way out was (saving the settings, closing the web view and the GPU), and an `exiting` with no
   `stopped` after it is a player that hung or died on the way out.
