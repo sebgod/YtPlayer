@@ -3,7 +3,7 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
-## Unreleased
+## 0.1.21 (2026-11-05)
 
 - **Compact mode covers the whole page again**: in a wide window the video's title, channel and like row, and the
   related videos, drew over the compact player and its controls. YouTube now names its player container for view
