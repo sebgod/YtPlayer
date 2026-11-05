@@ -35,6 +35,11 @@
     'html.ytpip-compact, html.ytpip-compact body { overflow: hidden !important; background: #000 !important; }\n' +
     'html.ytpip-compact #movie_player { position: fixed !important; inset: 0 !important;' +
     ' width: 100vw !important; height: 100vh !important; z-index: 2147483000 !important; background: #000 !important; }\n' +
+    // That z-index counts only up to the nearest stacking context above the player. Since November 2026
+    // YouTube names its player container for view transitions (view-transition-name: player-resize), which
+    // makes it one, and the title, channel and like row (#below, named too) and the related videos then
+    // paint over the player. Without the names there is no such context between the player and the page.
+    'html.ytpip-compact :has(#movie_player) { view-transition-name: none !important; }\n' +
     'html.ytpip-compact #masthead-container, html.ytpip-compact ytd-mini-guide-renderer,' +
     ' html.ytpip-compact tp-yt-app-drawer { display: none !important; }\n' +
     // End-screen cards and the "more videos" strip cover most of a small window.
@@ -626,6 +631,35 @@
     if (button) button.click();
     else toast('Open a video to watch it fullscreen');
   });
+
+  // YouTube lays its controls out for the size it measures the player at, and again only when that size changes.
+  // The host resizes the window within WebView2's fullscreen event, so the window grows while the page is still
+  // switching, and YouTube can measure the player in that instant at nothing (the watch column it leaves is
+  // hidden by then): it then keeps its tiny controls (a 100px bar, three buttons) on the whole screen, paused or
+  // playing, until the next real resize. A resize event alone is not one; nor is setInternalSize(). So once the
+  // window has settled, when the bar does not span the player, the player's width changes by a pixel and back,
+  // each with a resize event, and YouTube measures it again.
+  var refitTimer = 0;
+  function refitControls() {
+    var player = document.querySelector('#movie_player');
+    var bar = player && player.querySelector('.ytp-chrome-bottom');
+    if (!bar) return;
+    var width = player.getBoundingClientRect().width, barWidth = bar.getBoundingClientRect().width;
+    // The bar spans the player less its margins (12px a side), and a player of no width has nothing to fit.
+    if (width < 200 || (barWidth > width - 60 && barWidth <= width)) return;
+    player.style.setProperty('width', (width - 1) + 'px', 'important');
+    window.dispatchEvent(new Event('resize'));
+    setTimeout(function () {
+      player.style.removeProperty('width');
+      window.dispatchEvent(new Event('resize'));
+    }, 100);
+  }
+  function refitSoon() {
+    clearTimeout(refitTimer);
+    refitTimer = setTimeout(refitControls, 500);
+  }
+  document.addEventListener('fullscreenchange', refitSoon);
+  window.addEventListener('resize', function (e) { if (e.isTrusted) refitSoon(); });
 
   function post(msg) {
     try { window.chrome.webview.postMessage(msg); } catch (e) { /* no host bridge */ }

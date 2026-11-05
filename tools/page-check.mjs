@@ -83,6 +83,24 @@ check('result: opens its watch page', s.path === '/watch', { clicked, path: s.pa
 check('result: compact applies on the watch page', s.compact);
 check('result: reports showing:true', s.posted.some(m => m.showing === true), s.posted);
 check('result: video plays', s.video && !s.video.paused, s.video);
+// Compact's player is over the whole page: the watch page's title row and related videos stay under it,
+// whatever stacking contexts YouTube puts around the player (its view-transition names, November 2026).
+// At the narrow width the page's two columns are one and nothing lands under the player there, so this
+// looks at a wide window too, the size a maximised player has, where they did draw over it.
+const coveredAt = async (width, height) => {
+  if (width) { await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }); await sleep(2000); }
+  const out = await evaluate(`(() => { const out = [];
+    for (let y = 0.05; y < 1; y += 0.1) for (let x = 0.05; x < 1; x += 0.1) {
+      const e = document.elementFromPoint(innerWidth * x, innerHeight * y);
+      if (e && !e.closest('#movie_player')) out.push(Math.round(innerWidth * x) + ',' + Math.round(innerHeight * y) + ' ' + e.tagName.toLowerCase() + (e.id ? '#' + e.id : ''));
+    } return out; })()`);
+  if (width) { await send('Emulation.clearDeviceMetricsOverride'); await sleep(2000); }
+  return out;
+};
+for (const [width, height] of [[0, 0], [1440, 855]]) {
+  const covered = await coveredAt(width, height);
+  check(`result: nothing of the page draws over the compact player${width ? ` (${width}x${height})` : ''}`, covered.length === 0, covered.slice(0, 8));
+}
 
 // 3-. A real ad, when YouTube serves one (it comes when it likes): do what the host does with each Skip
 // the page reports, a trusted click there, and check that ad ends (the player leaves the ad, or the next
@@ -141,6 +159,19 @@ check("fullscreen: the strip's button puts the page fullscreen", full !== null, 
 await evaluate(`document.exitFullscreen().then(() => true, () => false)`); await sleep(1000);
 const left = await fullscreenElement();
 check('fullscreen: and it leaves', left === null, left);
+// The host resizes the window within WebView2's fullscreen event, so the page grows while it is still switching.
+// YouTube can measure the player in that instant and keep its tiny controls (a 100px bar) on the whole screen;
+// the page has YouTube measure it again. Here the viewport grows as the button is clicked, which gave that every
+// time. Then the player's width is its own again (the nudge leaves no style behind).
+const controlsFit = () => evaluate(`(() => { const p = document.querySelector('#movie_player'); return { tiny: p.classList.contains('ytp-tiny-mode'),
+  bar: Math.round(p.querySelector('.ytp-chrome-bottom').getBoundingClientRect().width), player: Math.round(p.getBoundingClientRect().width), inline: p.style.width }; })()`);
+await send('Runtime.evaluate', { expression: `document.querySelector('#movie_player .ytp-fullscreen-button').click()`, userGesture: true });
+await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+await sleep(2500);
+const fit = await controlsFit();
+check('fullscreen: as the window grows, the controls span the player', !fit.tiny && fit.bar > fit.player - 60 && fit.inline === '', fit);
+await evaluate(`document.exitFullscreen().then(() => true, () => false)`);
+await send('Emulation.clearDeviceMetricsOverride'); await sleep(1500);
 
 // 3b. The window's media controls (Windows' media flyout, the media keys): the page gives the host the player's
 // video as the track, and the host's presses come back to YouTube's handlers. YouTube's hover previews set the media
