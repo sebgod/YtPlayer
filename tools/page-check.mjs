@@ -159,6 +159,19 @@ check("fullscreen: the strip's button puts the page fullscreen", full !== null, 
 await evaluate(`document.exitFullscreen().then(() => true, () => false)`); await sleep(1000);
 const left = await fullscreenElement();
 check('fullscreen: and it leaves', left === null, left);
+// The host resizes the window within WebView2's fullscreen event, so the page grows while it is still switching.
+// YouTube can measure the player in that instant and keep its tiny controls (a 100px bar) on the whole screen;
+// the page has YouTube measure it again. Here the viewport grows as the button is clicked, which gave that every
+// time. Then the player's width is its own again (the nudge leaves no style behind).
+const controlsFit = () => evaluate(`(() => { const p = document.querySelector('#movie_player'); return { tiny: p.classList.contains('ytp-tiny-mode'),
+  bar: Math.round(p.querySelector('.ytp-chrome-bottom').getBoundingClientRect().width), player: Math.round(p.getBoundingClientRect().width), inline: p.style.width }; })()`);
+await send('Runtime.evaluate', { expression: `document.querySelector('#movie_player .ytp-fullscreen-button').click()`, userGesture: true });
+await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+await sleep(2500);
+const fit = await controlsFit();
+check('fullscreen: as the window grows, the controls span the player', !fit.tiny && fit.bar > fit.player - 60 && fit.inline === '', fit);
+await evaluate(`document.exitFullscreen().then(() => true, () => false)`);
+await send('Emulation.clearDeviceMetricsOverride'); await sleep(1500);
 
 // 3b. The window's media controls (Windows' media flyout, the media keys): the page gives the host the player's
 // video as the track, and the host's presses come back to YouTube's handlers. YouTube's hover previews set the media

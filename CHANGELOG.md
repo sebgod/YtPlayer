@@ -9,6 +9,11 @@ What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
   related videos, drew over the compact player and its controls. YouTube now names its player container for view
   transitions, which made that container a stacking context of its own, so the player's place above the page no
   longer reached past it. Compact clears those names; the page check now looks at a wide window as well.
+- **YouTube's fullscreen keeps its full controls**: now and then they came up tiny (a short progress bar and three
+  buttons in the corner, paused or playing), with the desktop showing at the bottom. The window grows within
+  WebView2's fullscreen event, while the page is still switching, and YouTube could measure its player in that
+  instant at nothing and keep the controls it laid out for that until the next real resize. Once the window has
+  settled, the page has YouTube measure the player again when its controls do not span it.
 - **The log says how long the player took to stop**, after its `exiting` line: a close that felt slow shows whether
   the player's way out was (saving the settings, closing the web view and the GPU), and an `exiting` with no
   `stopped` after it is a player that hung or died on the way out.
