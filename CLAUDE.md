@@ -38,7 +38,10 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   page since YouTube's October 2026 change, and is only the fallback.
 - The queue is YouTube's own: the script adds with the `addToPlaylistCommand` its "Add to queue" sends, run through
   `ytd-app.handleCommandWithCommandHandler` (`runCommand`; `resolveCommand` before October 2026), and reads `yt-playlist-manager.getPlaylistData()`. Both are YouTube internals; the
-  page check covers them.
+  page check covers them. A full load drops the queue, so a video opened from outside the page's links (a pasted
+  link or a later launch's, as `{play}` from the host once the page is ready; a Short) runs a `watchEndpoint` in
+  the page (`openVideo`), which YouTube puts in the queue; with the queue in use (its id starts `TLPQ`) a click on
+  a mix's or playlist's video does too. Ctrl+Q skips a video already in the list.
 - Help (the strip's `?`, F1) is a panel in the page: the host sends `{help}` (`Program.HelpMessage`: the version,
   the update check's word, whether Win+/ is ours) and the script draws it, with the list of keys, which is the
   script's to keep in step with the keys. `UpdateCheck` asks GitHub's `releases/latest` at start once its last answer
@@ -64,6 +67,8 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
 - One player: `InstanceGate` (SharpAstro.AppShell, which comes with SdlVulkan.Renderer) is claimed at start; a
   later launch hands its arguments to the running player and exits before it has a window (`--start-minimised`
   just exits). The hand-off is drained in `OnLoopIteration`, which runs while the window is hidden too.
+  Started hidden with Win+/ ours, the first navigation waits for `Summon` (`deferredUrl`), so a player nobody has
+  opened holds no YouTube page.
 - YouTube's fullscreen fills the screen: the window follows `INativeWebView.FullscreenChanged` (WebView2 only),
   resizing inside that handler; `PipMode.Fullscreen` is the page with no strip or border. To test it, use
   YouTube's own fullscreen (its F, or its button), which makes the document element fullscreen. Asking for

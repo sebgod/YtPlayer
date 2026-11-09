@@ -106,6 +106,15 @@ public class PageMessageTests
     public void APressGoesToThePageAsTheBrowsersAction(MediaButton button, string action)
         => Program.MediaActionMessage(button).ShouldBe($$"""{"mediaAction":"{{action}}"}""");
 
+    [Fact]
+    public void APastedVideoGoesToThePageAsItsWatchUrl()
+    {
+        var url = YouTubeUrl.FromPastedLink("youtu.be/dQw4w9WgXcQ?t=1m30s")!;
+        using var doc = System.Text.Json.JsonDocument.Parse(Program.PlayMessage(url));
+        doc.RootElement.GetProperty("play").GetString().ShouldBe(url);
+        url.ShouldContain("v=dQw4w9WgXcQ");
+    }
+
     [Theory]
     [InlineData("not json")]
     [InlineData("\"a string\"")]

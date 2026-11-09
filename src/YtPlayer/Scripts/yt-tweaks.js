@@ -89,7 +89,8 @@
   if (document.documentElement) addStyle();
   else document.addEventListener('readystatechange', addStyle, { once: true });
 
-  // A Short opens as an ordinary video: on a full load, on YouTube's in-page navigation, and on a click.
+  // A Short opens as an ordinary video: on a full load, on YouTube's in-page navigation, and on a click, the last
+  // two within the page (openVideo), so the queue stays.
   function shortId(href) {
     var m = /\/shorts\/([A-Za-z0-9_-]{11})/.exec(href || '');
     return m ? m[1] : null;
@@ -102,7 +103,7 @@
   document.addEventListener('yt-navigate-start', function (e) {
     var url = e && e.detail && e.detail.url;
     var id = shortId(url);
-    if (id) { e.stopImmediatePropagation(); location.assign('/watch?v=' + id); }
+    if (id) { e.stopImmediatePropagation(); openVideo(id, ''); }
   }, true);
   document.addEventListener('yt-navigate-finish', redirectIfShort);
   document.addEventListener('click', function (e) {
@@ -111,7 +112,7 @@
     if (!id) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    location.assign('/watch?v=' + id);
+    openVideo(id, '');
   }, true);
 
   // An ad: once YouTube offers its Skip button, press it, the click the viewer would make. YouTube
@@ -354,6 +355,26 @@
     return true;
   }
 
+  // A video opened from outside the page's own links (a pasted link, a later launch's, a Short) plays within the
+  // page, as a click on a related video does: a full load would drop the queue, which YouTube keeps only while the
+  // page lasts, and with the queue in use the video goes into it, after the one that plays. Away from YouTube (a
+  // sign-in page), a load of it. start is a link's t= (seconds, or 1h2m3s).
+  function startSeconds(t) {
+    var m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/.exec(t || '');
+    return m ? (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0) : 0;
+  }
+  function openVideo(id, start) {
+    var url = '/watch?v=' + id + (start ? '&t=' + encodeURIComponent(start) : '');
+    var seconds = startSeconds(start);
+    var endpoint = { videoId: id };
+    if (seconds > 0) endpoint.startTimeSeconds = seconds;
+    try {
+      if (location.hostname === 'www.youtube.com' && runCommand({ commandMetadata: { webCommandMetadata: {
+        url: url, webPageType: 'WEB_PAGE_TYPE_WATCH', rootVe: 3832 } }, watchEndpoint: endpoint })) return;
+    } catch (e) { /* not YouTube's app after all */ }
+    location.assign('https://www.youtube.com' + url);
+  }
+
   // The strip's home button: YouTube's home, the way its logo goes there, within the page, so a video plays on in
   // the background as it does when leaving it by any other link. The app's own home action first: since October 2026
   // a click on the logo reloads the page. Away from YouTube (a sign-in page), a load of it.
@@ -406,8 +427,32 @@
   function textOf(t) {
     return typeof t === 'string' ? t : t ? t.simpleText || (t.runs || []).map(function (r) { return r.text; }).join('') : '';
   }
-  // The command YouTube's own "Add to queue" sends, built from the id alone.
+  // The video that plays, from the player (its data), else the address.
+  function playingVideoId() {
+    var player = document.getElementById('movie_player');
+    try {
+      var data = player && player.getVideoData && player.getVideoData();
+      if (data && data.video_id) return data.video_id;
+    } catch (e) { /* not YouTube's player API after all */ }
+    return isWatchPage() ? new URLSearchParams(location.search).get('v') : null;
+  }
+  // The command YouTube's own "Add to queue" sends, built from the id alone. YouTube adds a video as often as it
+  // is asked, so one already in the list (the queue, or the mix or playlist that plays) is left where it is, and
+  // the notice says where; so is the video that plays with no list, which the queue would otherwise start with
+  // and then take again.
   function queueVideo(id, title) {
+    var data = playlistData();
+    var before = playlistEntries(data);
+    var at = before.map(function (v) { return v.videoId; }).indexOf(id);
+    if (at >= 0) {
+      toast('Already in the ' + (isQueue(data) ? 'queue' : 'list') + ', at ' + (at + 1) + ' of ' + before.length + ': '
+        + (title || textOf(before[at].title) || id));
+      return;
+    }
+    if (!before.length && playingVideoId() === id) {
+      toast('Already playing: ' + (title || document.title.replace(/ - YouTube$/, '') || id));
+      return;
+    }
     try {
       var ran = runCommand({ signalServiceEndpoint: { signal: 'CLIENT_SIGNAL', actions: [{ addToPlaylistCommand: {
         openMiniplayer: false, videoId: id, listType: 'PLAYLIST_EDIT_LIST_TYPE_QUEUE', videoIds: [id],
@@ -430,6 +475,23 @@
         + (added && list.length > 1 ? ' (' + list.length + ' in the queue)' : ''));
     })();
   }
+  // A click on a video that opens with its own list (a mix, a playlist's entry) would put that list in the queue's
+  // place, and the queue would be gone. While the queue is in use, the video plays in it instead, as a plain video
+  // does. The queue is the list YouTube's playlist manager keeps under a TLPQ id. Ctrl, Shift or a middle click is
+  // left to the browser, and so are the queue's own entries.
+  function isQueue(data) { return !!(data && /^TLPQ/.test(data.playlistId || '')); }
+  document.addEventListener('click', function (e) {
+    if (e.button !== 0 || e.ctrlKey || e.shiftKey || e.metaKey || e.altKey) return;
+    var a = e.target && e.target.closest ? e.target.closest('a[href*="watch?v="][href*="list="]') : null;
+    if (!a) return;
+    var params = new URLSearchParams((a.getAttribute('href') || '').split('?')[1] || '');
+    var id = params.get('v');
+    var data = playlistData();
+    if (!id || !/^[\w-]{11}$/.test(id) || !isQueue(data) || params.get('list') === data.playlistId) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    openVideo(id, params.get('t') || '');
+  }, true);
   function closeQueueList() {
     var el = document.getElementById('ytpip-queue');
     if (el) el.remove();
@@ -683,6 +745,11 @@
         else toast('Point at a video, or copy its link, to queue it');
       }
       if (d && d.listQueue) showQueueList(false);
+      // A pasted link, or a later launch's, to a video: it plays within the page, the queue kept.
+      if (d && typeof d.play === 'string') {
+        var play = /[?&]v=([\w-]{11})(?:.*[?&]t=([\w]+))?/.exec(d.play);
+        if (play) openVideo(play[1], play[2] || '');
+      }
       if (d && d.mediaAction) mediaAction(d.mediaAction);
       if (d && d.help && typeof d.help === 'object') showHelp(d.help);
       if (d && d.startPaused) pauseOnStart();

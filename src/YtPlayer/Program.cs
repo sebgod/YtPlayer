@@ -229,6 +229,23 @@ internal static class Program
             if (pageReady)
                 web.PostMessage(json);
         }
+        // Started hidden (at sign-in, --start-minimised) with Win+/ to bring it back: the page waits for the window
+        // to be first shown. A loaded YouTube page costs some 300 MB in its renderer, and more on the GPU, for a
+        // window nobody may open for hours; with nothing loaded the web view costs little.
+        string? deferredUrl = null;
+        // A link opened while the page is up (a pasted one, a later launch's): a video plays within the page, which
+        // keeps YouTube's queue (a full load drops it) and, in use, puts the video in it; anything else loads.
+        void OpenLink(string url)
+        {
+            deferredUrl = null;
+            if (pageReady && YouTubeUrl.TryGetVideoId(url, out _, out _))
+            {
+                web.PostMessage(CompactMessage(compact));
+                web.PostMessage(PlayMessage(url));
+            }
+            else
+                web.Navigate(url);
+        }
         // Not awaited: registered before the attach, it completes only after it, and the first
         // navigation waits for it anyway. Watched only so a refusal is not silent.
         web.AddScriptAtDocumentStartAsync(LoadTweaksScript()).ContinueWith(
@@ -252,8 +269,9 @@ internal static class Program
             }
             if (message.Showing is { } on)
                 ShowCompact(on);
-            if (message.Paste is { } pasted)
-                OpenPastedLink(web, pasted);
+            // Ctrl+V outside a text field: a YouTube link opens; anything else on the clipboard is left alone.
+            if (message.Paste is { } pasted && YouTubeUrl.FromPastedLink(pasted) is { } pastedUrl)
+                OpenLink(pastedUrl);
             if (message.Copy is { } link)
                 SetClipboardText(link);
             if (message.Ad is { } ad && (ad ? adLog.Started(System.DateTime.Now) : adLog.Ended(System.DateTime.Now)) is { } adLine)
@@ -299,7 +317,10 @@ internal static class Program
         web.PageError += error => Console.Error.WriteLine($"[page] {error}");
         web.AttachToWindow(window);
         PlaceWebView();
-        web.Navigate(startUrl);
+        if (startHidden && summonable)
+            deferredUrl = startUrl;
+        else
+            web.Navigate(startUrl);
 
         // Whether a newer release is out, from GitHub: the help button wears a red dot while one is, and the help
         // panel says which. The answer goes to the page too, which shows it if the panel is open.
@@ -450,7 +471,8 @@ internal static class Program
                 switch (key.Modifiers, key.Key)
                 {
                     case (InputModifier.Ctrl, InputKey.V):
-                        OpenPastedLink(web, GetClipboardText());
+                        if (YouTubeUrl.FromPastedLink(GetClipboardText()) is { } clipboardUrl)
+                            OpenLink(clipboardUrl);
                         return true;
                     case (InputModifier.Ctrl, InputKey.F):
                         web.Focus();
@@ -577,6 +599,11 @@ internal static class Program
         {
             if (window.IsHidden)
                 window.Show();
+            if (deferredUrl is { } url)
+            {
+                deferredUrl = null;
+                web.Navigate(url);
+            }
             window.Activate();
             if (!collapsed)
                 web.Focus();
@@ -592,7 +619,7 @@ internal static class Program
                 if (YouTubeUrl.TryGetVideoId(handed, out _, out _))
                     compact = true;
                 SetCollapsed(false);
-                web.Navigate(YouTubeUrl.ToStartUrl(handed));
+                OpenLink(YouTubeUrl.ToStartUrl(handed));
             }
             Summon();
         }
@@ -717,12 +744,8 @@ internal static class Program
         web.PostMessage(id is null ? """{"queue":null}""" : $$"""{"queue":"{{id}}"}""");
     }
 
-    // Ctrl+V outside a text field: a YouTube link opens; anything else on the clipboard is left alone.
-    private static void OpenPastedLink(INativeWebView web, string? pasted)
-    {
-        if (YouTubeUrl.FromPastedLink(pasted) is { } url)
-            web.Navigate(url);
-    }
+    // {play}: the page opens the video of a watch URL within itself (a pasted link, a later launch's).
+    internal static string PlayMessage(string watchUrl) => $$"""{"play":"{{JsonEncodedText.Encode(watchUrl)}}"}""";
 
     // {help}: open (or close) the panel, or, with open false, bring an open one up to date. newer is the release that
     // is out, update what the panel says of it (newer, checking, current, unknown, downloading, failed), summon

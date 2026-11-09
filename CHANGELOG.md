@@ -3,6 +3,20 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
+## Unreleased
+
+- **The queue stays**: it was gone after opening a link (Ctrl+V, or a video handed over by a later launch), a click
+  on a Short, or a click on a mix or a playlist's video, which YouTube puts in the queue's place. A link to a video
+  and a Short now play within the page, as a click on a related video does, so YouTube keeps the queue and puts the
+  video in it; with the queue in use, a mix's or a playlist's video plays in the queue too. Any other link still
+  loads the page, and a Ctrl- or Shift-click on a mix still opens the mix.
+- **Ctrl+Q no longer queues a video twice**: YouTube adds a video as often as it is asked, so the list showed it
+  twice. A video already in the queue (or in the mix or playlist that plays), or the one playing with no queue yet,
+  is left where it is, and the notice says where it is.
+- **Started hidden, the player loads YouTube only when it is first shown** (Win+/, or a later launch). Until then
+  the web view holds no page: a YouTube page costs some 300 MB in its renderer, and more on the GPU, for a window
+  that may stay hidden for hours. Trimming a window hidden later (Ctrl+H) waits on SdlVulkan.Renderer#168.
+
 ## 0.1.21 (2026-11-05)
 
 - **Compact mode covers the whole page again**: in a wide window the video's title, channel and like row, and the

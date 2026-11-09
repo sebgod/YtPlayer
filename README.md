@@ -27,7 +27,7 @@ The first run puts YtPlayer in the Start menu (a shortcut, which is also how Win
 the folder later and the next run moves the shortcut with it.
 
 To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` in the Startup folder
-(Win+R, `shell:startup`): it starts out of sight, and Win+/ brings it up, as does starting it again from the Start menu.
+(Win+R, `shell:startup`): it starts out of sight, with no page loaded until Win+/ brings it up, as does starting it again from the Start menu.
 
 ## The window
 
@@ -66,8 +66,9 @@ video as YtPlayer's: its title, channel and picture, with play/pause, previous a
 (Windows).
 
 The **queue** is YouTube's own, the one its "Add to queue" fills, so the next button and autoplay follow it. Like
-YouTube's, it lasts while the page does: opening a link with Ctrl+V or from the command line starts a new page
-without it.
+YouTube's, it lasts while the page does; a link to a video (Ctrl+V, the command line) plays within the page and
+joins the queue, as does a click on a mix or a playlist's video while the queue is in use. Ctrl+Q leaves a video
+already in the queue where it is.
 
 YouTube's **fullscreen** (F, its button, a double-click on the video, the strip's) fills the screen, not just the window
 (Windows); Esc or F again puts the window back where it was.

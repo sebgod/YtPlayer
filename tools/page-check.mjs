@@ -342,6 +342,28 @@ ids = JSON.parse(await evaluate(queueIds));
 const queuedBefore = ids[ids.indexOf('jNQXAC9IVRw') - 1];
 await evaluate(`window.__host({ previous: true })`); await sleep(5000);
 check('previous: in the queue, the entry before plays', !!queuedBefore && await evaluate(currentId) === queuedBefore, { queuedBefore, now: await evaluate(currentId), ids });
+// A video already in the queue is not added again, and the notice says where it is.
+await evaluate(`window.__host({ queue: 'jNQXAC9IVRw' })`); await sleep(1000);
+let again = JSON.parse(await evaluate(queueIds));
+check('queue: a video queued again stays once', again.filter(id => id === 'jNQXAC9IVRw').length === 1 && again.length === ids.length, again);
+check('queue: the notice says it is there', /^Already in the queue, at \d+ of \d+/.test(await evaluate(`document.getElementById('ytpip-toast')?.textContent || ''`)), await evaluate(`document.getElementById('ytpip-toast')?.textContent`));
+// A pasted link (the host's {play}) plays within the page, and the queue stays, with the video in it.
+await evaluate(`window.__samePage = true; window.__host({ play: 'https://www.youtube.com/watch?v=L_jWHffIx5E&t=30' })`); await sleep(5000);
+again = JSON.parse(await evaluate(queueIds));
+check('play: the host\'s {play} plays the video within the page', await evaluate(currentId) === 'L_jWHffIx5E' && await evaluate('window.__samePage === true'), { now: await evaluate(currentId), same: await evaluate('window.__samePage') });
+check('play: the queue stays, the video in it', again.includes('jNQXAC9IVRw') && again.includes('L_jWHffIx5E'), again);
+check('play: from the link\'s t=', (await evaluate(`Math.round(document.querySelector('#movie_player video')?.currentTime || 0)`)) >= 30);
+// A click on a mix's link, with the queue in use, plays its video in the queue rather than replacing the queue.
+await evaluate(`(() => { const a = document.createElement('a'); a.href = '/watch?v=fJ9rUzIMcZQ&list=RDfJ9rUzIMcZQ&start_radio=1'; a.textContent = 'mix';
+  document.body.appendChild(a); a.click(); a.remove(); })()`); await sleep(5000);
+again = JSON.parse(await evaluate(queueIds));
+check('queue: a mix\'s link plays its video in the queue', await evaluate(currentId) === 'fJ9rUzIMcZQ' && again.includes('jNQXAC9IVRw') && again.includes('fJ9rUzIMcZQ'), { now: await evaluate(currentId), again });
+// A click on a Short opens it as a video within the page, so the queue stays.
+await evaluate(`window.__samePage = true; (() => { const a = document.createElement('a'); a.href = '/shorts/kJQP7kiw5Fk'; a.textContent = 'short';
+  document.body.appendChild(a); a.click(); a.remove(); })()`); await sleep(5000);
+again = JSON.parse(await evaluate(queueIds));
+check('shorts: a click on a Short plays it as a video within the page', await evaluate('location.pathname') === '/watch' && await evaluate(currentId) === 'kJQP7kiw5Fk' && await evaluate('window.__samePage === true'), { path: await evaluate('location.pathname'), now: await evaluate(currentId) });
+check('shorts: the queue stays', again.includes('jNQXAC9IVRw'), again);
 await evaluate(`window.__host({ compact: false })`); await sleep(3000);
 const tile = JSON.parse(await evaluate(`(() => {
   const t = [...document.querySelectorAll('yt-lockup-view-model, ytd-compact-video-renderer')].find(e => e.querySelector('a[href*="watch?v="]') && e.getBoundingClientRect().height > 20);
