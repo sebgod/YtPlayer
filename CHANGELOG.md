@@ -3,7 +3,7 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
-## Unreleased
+## 0.1.22 (2026-11-09)
 
 - **The queue stays**: it was gone after opening a link (Ctrl+V, or a video handed over by a later launch), a click
   on a Short, or a click on a mix or a playlist's video, which YouTube puts in the queue's place. A link to a video
