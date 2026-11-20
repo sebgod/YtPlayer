@@ -3,7 +3,7 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
-## Unreleased
+## 0.1.24 (2026-11-20)
 
 - **The strip's buttons have tooltips** (#33): rest the pointer on one and it says what the button is, what a press
   does as things are (Play or Pause, Fold up or Unfold, whether stay on top is on, that an update is out), and its
