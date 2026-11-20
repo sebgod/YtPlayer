@@ -11,6 +11,9 @@ internal static partial class YouTubeUrl
     [GeneratedRegex("^[A-Za-z0-9_-]{11}$")]
     private static partial Regex VideoIdPattern();
 
+    /// <summary>Whether <paramref name="text"/> has the form of a video's id, and nothing else.</summary>
+    public static bool IsVideoId(string text) => VideoIdPattern().IsMatch(text);
+
     public static string ToStartUrl(string? input)
     {
         var text = input?.Trim();

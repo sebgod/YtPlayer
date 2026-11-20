@@ -303,6 +303,9 @@ internal static class Program
                 QueueFromClipboard(web);
             if (message.Help)
                 ShowHelp();
+            // Ctrl+S: the transcript the page read, written into the Downloads folder; the page says how it went.
+            if (message.Transcript is { } transcript)
+                web.PostMessage(SaveTranscript(transcript));
             // Only the release the check found, whatever the page asks.
             if (message.OpenRelease && UpdateAvailable() && !OpenURL(latest!.Url))
                 PlayerLog.Write($"the release page did not open: {GetError()}");
@@ -507,6 +510,13 @@ internal static class Program
                         SetCollapsed(false);
                         web.Focus();
                         web.PostMessage("""{"listQueue":true}""");
+                        return true;
+                    // The video's transcript, which the page reads and sends back for the host to write; its
+                    // notices are the page's, so the window unfolds to show them.
+                    case (InputModifier.Ctrl, InputKey.S):
+                        SetCollapsed(false);
+                        web.Focus();
+                        web.PostMessage("""{"saveTranscript":true}""");
                         return true;
                     // YouTube's own keys for the next and previous videos, which the page takes itself; on the strip
                     // they do what its buttons do.
@@ -742,6 +752,39 @@ internal static class Program
     {
         var id = YouTubeUrl.VideoIdFromPastedLink(GetClipboardText());
         web.PostMessage(id is null ? """{"queue":null}""" : $$"""{"queue":"{{id}}"}""");
+    }
+
+    // Ctrl+S: the transcript goes into the Downloads folder as a text file, and the answer to the page says where
+    // ({transcriptSaved}).
+    private static string SaveTranscript(PageTranscript transcript)
+    {
+        var folder = DownloadsFolder();
+        return TranscriptSavedMessage(Path.GetFileName(Path.TrimEndingDirectorySeparator(folder)), transcript.TrySave(folder));
+    }
+
+    // The user's Downloads folder, wherever they keep it (SDL asks the system); failing that, the usual place.
+    private static string DownloadsFolder()
+        => GetUserFolder(Folder.Downloads) is { Length: > 0 } folder
+            ? folder
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+
+    // {transcriptSaved}: the file the transcript was written to and the folder it is in, by name, for the page's
+    // notice; null when it was not written.
+    internal static string TranscriptSavedMessage(string folder, string? file)
+    {
+        if (file is null)
+            return """{"transcriptSaved":null}""";
+        var buffer = new MemoryStream();
+        using (var json = new Utf8JsonWriter(buffer))
+        {
+            json.WriteStartObject();
+            json.WriteStartObject("transcriptSaved");
+            json.WriteString("folder", folder);
+            json.WriteString("file", file);
+            json.WriteEndObject();
+            json.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
     }
 
     // {play}: the page opens the video of a watch URL within itself (a pasted link, a later launch's).

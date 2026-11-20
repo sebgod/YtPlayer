@@ -70,6 +70,11 @@ YouTube's, it lasts while the page does; a link to a video (Ctrl+V, the command 
 joins the queue, as does a click on a mix or a playlist's video while the queue is in use. Ctrl+Q leaves a video
 already in the queue where it is.
 
+Ctrl+S saves the video's **transcript**, the one YouTube's "Show transcript" lists, as a text file in your Downloads
+folder, named after the video (`Title [id].txt`): the title, the channel, the link and the transcript's language, then
+each line with its time, and a chapter's name where one starts. It is the language YouTube picks for you; a video
+with no transcript says so.
+
 YouTube's **fullscreen** (F, its button, a double-click on the video, the strip's) fills the screen, not just the window
 (Windows); Esc or F again puts the window back where it was.
 
@@ -95,6 +100,7 @@ and remembers each size, as you last left it, between runs; so are its position 
 | **Shift+P** | the previous video in a playlist (YouTube's own key); on the folded strip, what the previous button does |
 | **Ctrl+Q** | queues the video under the pointer (a thumbnail), or else the one whose link is on the clipboard |
 | **Ctrl+L** | lists the queue (or the mix or playlist that plays); click an entry to play it, Esc closes the list |
+| **Ctrl+S** | saves the video's transcript as a text file in the Downloads folder |
 | **F** | YouTube's fullscreen, which fills the screen; Esc or F again leaves it |
 | media keys, headset button | play/pause, next and previous, as with YouTube in a browser |
 
