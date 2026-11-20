@@ -91,12 +91,15 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   grows, and the page drops out of fullscreen. The strip's fullscreen button (`PipChrome.CanFullscreen`, Windows
   only) dispatches `ytpip-fullscreen` in the page through the DevTools protocol (`Runtime.evaluate` with
   `userGesture`), on which the page script clicks YouTube's own button: a page goes fullscreen only on the user's
-  gesture, and a posted message is none.
+  gesture, and a posted message is none. Nor is the gesture all: since WebView2 157 a page that is not the focused
+  one is refused fullscreen, so the host gives the page the keyboard (`web.Focus()`) before it dispatches the event.
 - A double-click on the strip folds the window, as the collapse button does. SDL gives the app no click on a
   draggable area, so it comes from `SdlVulkanWindow.TryReportCaptionDoubleClicks` (Windows only).
 - `tools/page-check.mjs` drives that script in a headless Edge against live YouTube (search, compact,
   the keys, paste, miniplayer, the media session, next, previous and home, the transcript, the strip's fullscreen, and when YouTube serves one, a real ad's Skip clicked as the host clicks it) with a stub for the host. Run it after touching the script; YouTube's markup
-  moves under it.
+  moves under it. It stops its own browser on every way out (by the profile it runs on: Edge can hand over to another
+  process, which a kill of the spawned one misses) and has deadlines, a call's 90 seconds and the run's 15 minutes;
+  keep both when changing it.
 - `WindowFit.cs`: the window's two sizes (PiP while compact is on screen, browse otherwise) and what size a
   switch gives it, in design units. The window does the rest (SdlVulkan.Renderer 7.68): `ToWindowSize` turns
   design units into its coordinates, and `ResizeInPlace` resizes it keeping the corner nearest the display's

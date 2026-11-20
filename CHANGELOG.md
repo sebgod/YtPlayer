@@ -10,6 +10,15 @@ What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
   key. The tooltip opens under its button, over the top of the page, so it covers no other button; the page draws
   it there, as the web view covers everything below the strip. With the window folded, or while a page is still
   loading, it opens beside the button, inside the strip, on one line.
+- **The strip's fullscreen button gives the page the keyboard before it asks for fullscreen.** Since Edge and
+  WebView2 157 a page that is not the focused one is refused fullscreen, whatever the gesture, and the press left
+  the keyboard on the strip: the player asked first and gave the page the keyboard after. The page check failed on
+  exactly this.
+- **The page check stops its browser however it ends**, and ends: a finished run had left a headless Edge up with a
+  YouTube page in it (Edge can hand over to another process of its own, which killing the one that was started does
+  not reach), and one run hung for half an hour. It now closes the browser over its own protocol, stops whatever
+  still runs on its profile on every way out, accepts a dialog, gives up on a call the page does not answer in 90
+  seconds, and on the whole after 15 minutes.
 
 ## 0.1.23 (2026-11-20)
 

@@ -834,6 +834,8 @@
 
   // The strip's fullscreen button: YouTube's own fullscreen, as its button gives it. The host dispatches this event
   // through the DevTools protocol as the user's gesture, which a page may go fullscreen on; a posted message is not one.
+  // The gesture is not all: since Edge 157 (November 2026) a page that is not the focused one is refused fullscreen
+  // ("not granted") whatever the gesture, so the host gives the page the keyboard before it dispatches this.
   window.addEventListener('ytpip-fullscreen', function () {
     var button = isWatchPage() && document.querySelector('#movie_player .ytp-fullscreen-button');
     if (button) button.click();
