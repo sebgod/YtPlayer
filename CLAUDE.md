@@ -15,11 +15,11 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   are. The tests paint it into DIR.Lib's `RgbaImageRenderer` and ask the regions.
 - `Scripts/yt-tweaks.js` runs at document start on every page (`INativeWebView.AddScriptAtDocumentStartAsync`):
   Shorts hiding, the Shorts redirect, compact mode, the hidden miniplayer, ad skipping, the help panel, and the
-  Ctrl+F, Ctrl+C, Ctrl+Shift+C, Ctrl+P, Ctrl+H, Ctrl+Up/Down, Ctrl+Q, Ctrl+L, Ctrl+V and F1 keys. Host and page talk
+  Ctrl+F, Ctrl+C, Ctrl+Shift+C, Ctrl+P, Ctrl+H, Ctrl+Up/Down, Ctrl+Q, Ctrl+L, Ctrl+S, Ctrl+V and F1 keys. Host and page talk
   through `chrome.webview` messages: `{ready}`, `{showing}`, `{paste}`, `{copy}`, `{skipAt}`, `{playing}`, `{hide}`,
-  `{collapse}`, `{queueClipboard}`, `{media}`, `{help}`, `{openRelease}` from the page (read by `PageMessage`),
+  `{collapse}`, `{queueClipboard}`, `{media}`, `{help}`, `{openRelease}`, `{transcript}` from the page (read by `PageMessage`),
   `{compact}`, `{search}`, `{copyLink}`, `{togglePlay}`, `{next}`, `{previous}`, `{home}`, `{queue}`, `{listQueue}`,
-  `{mediaAction}`, `{help}` from the host.
+  `{mediaAction}`, `{help}`, `{saveTranscript}`, `{transcriptSaved}` from the host.
 - Windows' media controls (the flyout, the lock screen, the media keys) show the player's own entry, for its window
   (`SdlVulkanWindow.TryGetMediaControls`, SdlVulkan.Renderer 7.69), named after the app id `AppIdentity.Claim`
   (AppShell 1.2) sets at start, with the Start menu shortcut that carries it. WebView2's own entry is off
@@ -42,6 +42,13 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   link or a later launch's, as `{play}` from the host once the page is ready; a Short) runs a `watchEndpoint` in
   the page (`openVideo`), which YouTube puts in the queue; with the queue in use (its id starts `TLPQ`) a click on
   a mix's or playlist's video does too. Ctrl+Q skips a video already in the list.
+- Ctrl+S saves the video's transcript. YouTube's own transcript panel fetches it: the script opens the panel with
+  the `changeEngagementPanelVisibilityAction` its button sends (`runCommand`), reads the segments from the panel's
+  `ytd-transcript-search-panel-renderer.data` once they are this video's, and closes it again. A request of the
+  script's own is refused (`get_transcript`: "precondition check failed"; a caption track's `baseUrl` answers empty
+  without the player's token), so do not go back to one. The page sends `{transcript}` (the video, the language, the
+  lines), and the host (`PageTranscript`) writes `Title [id].txt` into the Downloads folder
+  (SDL's `GetUserFolder`) and answers `{transcriptSaved}`: the page names no path, and the id must be a video's.
 - Help (the strip's `?`, F1) is a panel in the page: the host sends `{help}` (`Program.HelpMessage`: the version,
   the update check's word, whether Win+/ is ours) and the script draws it, with the list of keys, which is the
   script's to keep in step with the keys. `UpdateCheck` asks GitHub's `releases/latest` at start once its last answer
@@ -80,7 +87,7 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
 - A double-click on the strip folds the window, as the collapse button does. SDL gives the app no click on a
   draggable area, so it comes from `SdlVulkanWindow.TryReportCaptionDoubleClicks` (Windows only).
 - `tools/page-check.mjs` drives that script in a headless Edge against live YouTube (search, compact,
-  the keys, paste, miniplayer, the media session, next, previous and home, the strip's fullscreen, and when YouTube serves one, a real ad's Skip clicked as the host clicks it) with a stub for the host. Run it after touching the script; YouTube's markup
+  the keys, paste, miniplayer, the media session, next, previous and home, the transcript, the strip's fullscreen, and when YouTube serves one, a real ad's Skip clicked as the host clicks it) with a stub for the host. Run it after touching the script; YouTube's markup
   moves under it.
 - `WindowFit.cs`: the window's two sizes (PiP while compact is on screen, browse otherwise) and what size a
   switch gives it, in design units. The window does the rest (SdlVulkan.Renderer 7.68): `ToWindowSize` turns

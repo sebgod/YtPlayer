@@ -3,6 +3,21 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
+## Unreleased
+
+- **Ctrl+S saves the video's transcript**, the one YouTube's "Show transcript" lists, as a text file in the Downloads
+  folder, named after the video (`Title [id].txt`): the title, the channel, the link and the transcript's language,
+  then each line with its time, and a chapter's name where one starts. It is the language YouTube picks; a video
+  with no transcript says so, and the key works from the strip too. YouTube's own transcript panel fetches it (the
+  page opens it for a moment, under the player in compact, and closes it again): a request of the player's own for it
+  is refused.
+- **A long notice wraps inside the window**: it broke at half the window's width, whatever room there was.
+- **SdlVulkan.Renderer 7.106** (from 7.78), with **DIR.Lib 11.85** and **AppShell 1.3**, their latest, pinned here
+  now (the renderer's package asks only for 11.84 and 1.2). No change to the player's code. Of what the renderer
+  brings, the player gets: SDL no longer keeps the display awake for an open window (7.80; a playing video still
+  does, through the web view), and the strip's hover ends when the pointer leaves the window (7.102). 7.86 can
+  suspend a hidden web view (SdlVulkan.Renderer#168), which the player does not use yet.
+
 ## 0.1.22 (2026-11-09)
 
 - **The queue stays**: it was gone after opening a link (Ctrl+V, or a video handed over by a later launch), a click

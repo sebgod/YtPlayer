@@ -52,7 +52,9 @@
     '#ytpip-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);' +
     ' z-index: 2147483647; padding: 8px 14px; border-radius: 8px; background: rgba(24, 24, 28, 0.92);' +
     ' color: #fff; font: 500 14px/1.2 Roboto, Arial, sans-serif; opacity: 0; transition: opacity 0.2s;' +
-    ' pointer-events: none; }\n' +
+    // As wide as its text up to the window's width, where it wraps (a file's name breaks anywhere).
+    ' pointer-events: none; box-sizing: border-box; width: max-content; max-width: calc(100vw - 16px);' +
+    ' text-align: center; overflow-wrap: anywhere; }\n' +
     '#ytpip-toast.ytpip-toast-on { opacity: 1; }\n' +
     // The queue's list (Ctrl+L), over everything, compact included.
     '#ytpip-queue { position: fixed; left: 8px; right: 8px; top: 8px; max-height: calc(100vh - 16px); overflow: auto;' +
@@ -255,7 +257,8 @@
     var mm = h ? (m < 10 ? '0' : '') + m : String(m);
     return (h ? h + ':' : '') + mm + ':' + (s < 10 ? '0' : '') + s;
   }
-  function toast(text) {
+  // Shown for a second and a half, or for as long as asked (a notice with a file's name to read).
+  function toast(text, ms) {
     var el = document.getElementById('ytpip-toast');
     if (!el) {
       el = document.createElement('div');
@@ -265,7 +268,7 @@
     el.textContent = text;
     el.classList.add('ytpip-toast-on');
     clearTimeout(toast.timer);
-    toast.timer = setTimeout(function () { el.classList.remove('ytpip-toast-on'); }, 1500);
+    toast.timer = setTimeout(function () { el.classList.remove('ytpip-toast-on'); }, ms || 1500);
   }
   function copyLink(atTime) {
     var video = playerVideo();
@@ -558,6 +561,104 @@
     post({ hide: true });
   }, true);
 
+  // Ctrl+S saves the video's transcript, the one YouTube's "Show transcript" lists, as a text file (the browser
+  // would save the page). YouTube's own panel gets it: a page script's request for it is refused (get_transcript
+  // answers "precondition check failed", and a caption track's address answers empty without the player's token).
+  // So the panel is opened with the command its button sends, read once it holds this video's segments, and closed
+  // again if it was closed; in compact the player is over it all the while. The host writes the file, into the
+  // Downloads folder, and answers {transcriptSaved} with its name. The strip's Ctrl+S comes here as
+  // {saveTranscript}.
+  var TRANSCRIPT_PANEL = 'engagement-panel-searchable-transcript';
+  function transcriptPanel() {
+    return document.querySelector('ytd-engagement-panel-section-list-renderer[target-id="' + TRANSCRIPT_PANEL + '"]');
+  }
+  function showTranscriptPanel(show) {
+    return runCommand({ changeEngagementPanelVisibilityAction: { targetId: TRANSCRIPT_PANEL,
+      visibility: show ? 'ENGAGEMENT_PANEL_VISIBILITY_EXPANDED' : 'ENGAGEMENT_PANEL_VISIBILITY_HIDDEN' } });
+  }
+  // The first value under a key, however deep YouTube nests it this month.
+  function findKey(o, key, depth) {
+    if (!o || typeof o !== 'object' || depth > 12) return null;
+    if (o[key]) return o[key];
+    for (var k in o) {
+      var found = findKey(o[k], key, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  function watchVideoId() { return isWatchPage() ? new URLSearchParams(location.search).get('v') : null; }
+  // The watch page's video by name: the player's, when it has this video (during an ad it may have the ad's).
+  function videoDetails(id) {
+    var player = document.getElementById('movie_player');
+    try {
+      var details = player && player.getPlayerResponse && (player.getPlayerResponse() || {}).videoDetails;
+      if (details && details.videoId === id) return { title: details.title || '', channel: details.author || '' };
+      var data = player && player.getVideoData && player.getVideoData();
+      if (data && data.video_id === id) return { title: data.title || '', channel: data.author || '' };
+    } catch (e) { /* not YouTube's player API after all */ }
+    return { title: document.title.replace(/^\(\d+\+?\) /, '').replace(/ - YouTube$/, ''), channel: '' };
+  }
+  // The panel's transcript once it is this video's (a segment's id starts with its video's), else null: the lines
+  // with their start in seconds, a chapter's heading among them, and the language YouTube chose.
+  function readTranscript(id) {
+    var panel = transcriptPanel();
+    var holder = panel && panel.querySelector('ytd-transcript-search-panel-renderer, ytd-transcript-renderer');
+    var data = holder && holder.data;
+    var segments = findKey(data, 'initialSegments', 0);
+    if (!segments || !segments.length) return null;
+    var lines = [];
+    for (var i = 0; i < segments.length; i++) {
+      var line = segments[i].transcriptSegmentRenderer, head = segments[i].transcriptSectionHeaderRenderer;
+      if (line) {
+        if (line.targetId && line.targetId.indexOf(id + '.') !== 0) return null;
+        var said = textOf(line.snippet).replace(/\s+/g, ' ').trim();
+        if (said) lines.push({ t: Math.floor((+line.startMs || 0) / 1000), text: said });
+      } else if (head) {
+        var label = head.sectionHeader && head.sectionHeader.sectionHeaderViewModel;
+        var name = (label && label.headline && label.headline.content) || textOf(head.snippet);
+        if (name) lines.push({ t: Math.floor((+head.startMs || 0) / 1000), chapter: name.trim() });
+      }
+    }
+    if (!lines.length) return null;
+    var language = (findKey(data.footer || data, 'subMenuItems', 0) || []).filter(function (m) { return m.selected; })[0];
+    return { lines: lines, language: language ? textOf(language.title) : '' };
+  }
+  var transcriptBusy = false;
+  function saveTranscript() {
+    var id = watchVideoId();
+    if (!id) { toast('Open a video to save its transcript'); return; }
+    if (transcriptBusy) return;
+    var panel = transcriptPanel();
+    if (!panel) { toast('This video has no transcript'); return; }
+    var wasOpen = panel.getAttribute('visibility') === 'ENGAGEMENT_PANEL_VISIBILITY_EXPANDED';
+    try {
+      if (!wasOpen && !showTranscriptPanel(true)) { toast('Cannot get the transcript on this page'); return; }
+    } catch (e) { toast('Could not get the transcript'); return; }
+    transcriptBusy = true;
+    toast('Getting the transcript…', 10000);
+    // YouTube fetches it once the panel shows: looked for every 200 ms, for up to ten seconds, or until the page
+    // is another video's.
+    var deadline = Date.now() + 10000;
+    (function read() {
+      var here = watchVideoId() === id;
+      var found = here ? readTranscript(id) : null;
+      if (!found && here && Date.now() < deadline) { setTimeout(read, 200); return; }
+      transcriptBusy = false;
+      try {
+        if (!wasOpen && here) showTranscriptPanel(false);
+      } catch (e) { /* not YouTube's app after all */ }
+      if (!found) { toast(here ? 'Could not get the transcript' : 'The video changed: no transcript saved'); return; }
+      var video = videoDetails(id);
+      post({ transcript: { id: id, title: video.title, channel: video.channel, language: found.language, lines: found.lines } });
+    })();
+  }
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || (e.key !== 's' && e.key !== 'S')) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    saveTranscript();
+  }, true);
+
   // The help panel: F1 or the strip's ? (the host's {help}, which brings the version and the update check's answer).
   // The keys are this script's and the host's; the README has the same list.
   function helpKeys(summon) {
@@ -573,6 +674,7 @@
       ['Ctrl+Shift+C', "copy the video's link at the current time"],
       ['Ctrl+Q', 'queue the video under the pointer, or the copied link'],
       ['Ctrl+L', 'list the queue'],
+      ['Ctrl+S', "save the video's transcript to Downloads"],
       ['Ctrl+Up / Ctrl+Down', 'fold the window to its strip / unfold it'],
       ['F', "YouTube's fullscreen"],
       ['Esc', 'close this, the queue or the search']
@@ -745,6 +847,14 @@
         else toast('Point at a video, or copy its link, to queue it');
       }
       if (d && d.listQueue) showQueueList(false);
+      // The strip's Ctrl+S, and the host's answer to a {transcript}: the file it wrote and the folder it is in, or
+      // null when it could not write it.
+      if (d && d.saveTranscript) saveTranscript();
+      if (d && 'transcriptSaved' in d) {
+        var saved = d.transcriptSaved;
+        if (saved) toast('Transcript saved to ' + saved.folder + ': ' + saved.file, 5000);
+        else toast('Could not save the transcript (ytplayer.log says why)', 5000);
+      }
       // A pasted link, or a later launch's, to a video: it plays within the page, the queue kept.
       if (d && typeof d.play === 'string') {
         var play = /[?&]v=([\w-]{11})(?:.*[?&]t=([\w]+))?/.exec(d.play);

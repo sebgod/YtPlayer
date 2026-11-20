@@ -16,12 +16,13 @@ namespace YtPlayer;
 /// <c>update</c> (the help panel's update button, with <c>resume</c>, the link to what plays, to open again after it,
 /// and <c>paused</c>, whether it was paused),
 /// <c>openRelease</c> (the help panel's link to a newer release, which the host opens in the
-/// default browser: the page names no address, so only the release the host found is ever opened).</summary>
+/// default browser: the page names no address, so only the release the host found is ever opened),
+/// <c>transcript</c> (Ctrl+S: the video's transcript, for the host to write into the Downloads folder).</summary>
 internal readonly record struct PageMessage(
     bool Ready, bool? Showing, string? Paste, string? Copy = null, (double X, double Y)? SkipAt = null,
     bool? Playing = null, bool? Ad = null, bool Hide = false, bool? Collapse = null, bool QueueClipboard = false,
     PageTrack? Media = null, bool MediaGone = false, bool Help = false, bool OpenRelease = false,
-    bool Update = false, string? Resume = null, bool ResumePaused = false)
+    bool Update = false, string? Resume = null, bool ResumePaused = false, PageTranscript? Transcript = null)
 {
     /// <summary>Reads <paramref name="json"/>; anything that is not one of ours reads as empty.</summary>
     public static PageMessage Parse(string json)
@@ -63,7 +64,8 @@ internal readonly record struct PageMessage(
                 Resume: root.TryGetProperty("resume", out var resume) && resume.ValueKind == JsonValueKind.String
                     ? resume.GetString()
                     : null,
-                ResumePaused: root.TryGetProperty("paused", out var paused) && paused.ValueKind == JsonValueKind.True);
+                ResumePaused: root.TryGetProperty("paused", out var paused) && paused.ValueKind == JsonValueKind.True,
+                Transcript: root.TryGetProperty("transcript", out var transcript) ? PageTranscript.From(transcript) : null);
         }
         catch (JsonException)
         {

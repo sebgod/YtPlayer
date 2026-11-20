@@ -444,10 +444,40 @@ await evaluate(`window.__host({ togglePlay: true })`); await sleep(1500);
 s = await state();
 check("update: the viewer's play (the strip's button) ends the hold", s.video?.paused === false, s.video);
 
+// 12a. Ctrl+S: the video's transcript, which YouTube's own panel fetches (opened by its command, and closed again),
+// goes to the host with the video and its lines, a chapter's name among them; the host's answer shows as the notice.
+// Away from a video (the results page below) a notice says so, and nothing is sent.
+const transcriptPanel = `document.querySelector('ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-searchable-transcript"]')?.getAttribute('visibility') ?? null`;
+const notice = `(() => { const t = document.getElementById('ytpip-toast'); return t?.classList.contains('ytpip-toast-on') ? t.textContent : null; })()`;
+await evaluate(`window.__posted.length = 0`);
+await press('s', 'KeyS', 83, 2);
+let transcript = null;
+for (let i = 0; i < 60 && !transcript; i++) { await sleep(200); transcript = (await evaluate(`window.__posted`)).find(m => m.transcript)?.transcript ?? null; }
+check("transcript: Ctrl+S sends the video's transcript, each line with its time",
+  transcript?.id === 'jNQXAC9IVRw' && transcript.lines?.length > 3 && transcript.lines.every(l => Number.isInteger(l.t) && l.t >= 0 && !!(l.text || l.chapter))
+    && /elephants/.test(transcript.lines.map(l => l.text ?? '').join(' ')), transcript ?? { panel: await evaluate(transcriptPanel), notice: await evaluate(notice) });
+check('transcript: with the title, the channel and the language', transcript?.title === 'Me at the zoo' && transcript?.channel === 'jawed' && !!transcript?.language,
+  transcript && { title: transcript.title, channel: transcript.channel, language: transcript.language });
+if (transcript && !transcript.lines.some(l => l.chapter)) console.log('.... transcript: YouTube lists no chapters for this video now; their names are not checked');
+await sleep(500);
+const panelAfter = await evaluate(transcriptPanel);
+check("transcript: YouTube's panel is closed again", panelAfter !== null && panelAfter !== 'ENGAGEMENT_PANEL_VISIBILITY_EXPANDED', panelAfter);
+await evaluate(`window.__host({ transcriptSaved: { folder: 'Downloads', file: 'Me at the zoo [jNQXAC9IVRw].txt' } })`); await sleep(200);
+check("transcript: the host's answer is the notice", await evaluate(notice) === 'Transcript saved to Downloads: Me at the zoo [jNQXAC9IVRw].txt', await evaluate(notice));
+// The strip's Ctrl+S is the host's {saveTranscript}.
+await evaluate(`window.__posted.length = 0; window.__host({ saveTranscript: true })`);
+let again12 = false;
+for (let i = 0; i < 60 && !again12; i++) { await sleep(200); again12 = (await evaluate(`window.__posted`)).some(m => m.transcript?.id === 'jNQXAC9IVRw'); }
+check("transcript: the host's {saveTranscript} sends it too", again12);
+
 // 13. Ctrl+Q over a thumbnail YouTube's hover preview covers (a search's results): the preview player is not in the
 // tile, and the video under it is still the one queued.
 await send('Page.navigate', { url: 'https://www.youtube.com/results?search_query=depeche+mode' });
 await waitFor('Page.loadEventFired'); await sleep(6000);
+await evaluate(`window.__posted.length = 0`);
+await press('s', 'KeyS', 83, 2); await sleep(400);
+check('transcript: away from a video, Ctrl+S says to open one', await evaluate(notice) === 'Open a video to save its transcript'
+  && !(await evaluate(`window.__posted`)).some(m => m.transcript), await evaluate(notice));
 const thumb = JSON.parse(await evaluate(`(() => {
   const t = [...document.querySelectorAll('ytd-video-renderer')].find(e => e.querySelector('a#thumbnail[href*="watch?v="]'));
   if (!t) return 'null';
