@@ -610,8 +610,11 @@ internal static class Program
                     // YouTube's own fullscreen, which the window follows (FullscreenChanged). A page goes fullscreen
                     // only on the user's gesture, and the press was on the strip, not in the page: the page script
                     // clicks YouTube's button on an event the DevTools protocol dispatches as the user's. Folded, the
-                    // window unfolds first: there is no fullscreen from the strip alone.
+                    // window unfolds first: there is no fullscreen from the strip alone. And the page takes the keyboard
+                    // before it is asked, not after: since WebView2 157 a page that is not the focused one is refused
+                    // fullscreen, whatever the gesture, and the press left the keyboard on the strip.
                     SetCollapsed(false);
+                    web.Focus();
                     web.CallDevToolsProtocolMethodAsync("Runtime.evaluate",
                             """{"expression":"window.dispatchEvent(new Event('ytpip-fullscreen'))","userGesture":true}""")
                         .ContinueWith(t => PlayerLog.Write($"fullscreen: the press did not reach the page: {t.Exception?.GetBaseException().Message}"),

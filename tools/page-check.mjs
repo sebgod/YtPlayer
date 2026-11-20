@@ -2,7 +2,7 @@
 // flows the host relies on, with a stub in place of the WebView2 host bridge.
 // Usage: node tools/page-check.mjs [yt-tweaks.js] [profile dir]   (Windows: needs Edge; Node 22+)
 // Defaults: the script in src/, and a fresh profile in the temp folder. Exits 1 on any FAIL.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -20,6 +20,40 @@ const proc = spawn(edge, [
   'about:blank'], { stdio: 'ignore' });
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// The browser goes when the check does, however it ends. Killing the process spawned above is not enough: Edge can
+// hand over to another process of its own and exit (it does after it has updated itself), and the browser then
+// stayed up with a YouTube page playing in it, long after the check (one was found 13 processes strong). So at
+// the end the browser is asked to close over its own protocol, and on every way out, a failed check or an
+// exception included, whatever still runs on the check's profile is stopped.
+const stopBrowser = () => {
+  proc.kill();
+  if (process.platform === 'win32')
+    spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command',
+      `Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('${profileDir.replaceAll("'", "''")}') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`],
+      { stdio: 'ignore', timeout: 60000 });
+};
+process.on('exit', stopBrowser);
+const closeBrowser = async () => {
+  const version = `http://127.0.0.1:${port}/json/version`;
+  try {
+    const { webSocketDebuggerUrl } = await (await fetch(version, { signal: AbortSignal.timeout(2000) })).json();
+    const browser = new WebSocket(webSocketDebuggerUrl);
+    await Promise.race([new Promise(r => browser.addEventListener('open', r, { once: true })), sleep(2000)]);
+    browser.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
+  } catch { /* gone already, or not answering: stopBrowser has it */ }
+  // Up to five seconds for it to go: its port stops answering.
+  for (let i = 0; i < 25; i++) {
+    try { await fetch(version, { signal: AbortSignal.timeout(500) }); } catch { return; }
+    await sleep(200);
+  }
+};
+// A check that hangs (a protocol call YouTube's page never answers) ends too: one ran for half an hour.
+const watchdog = setTimeout(() => {
+  console.log('FAIL the check did not finish in 15 minutes');
+  process.exit(1);
+}, 15 * 60 * 1000);
+
 let target;
 for (let i = 0; i < 50 && !target; i++) {
   try { target = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find(t => t.type === 'page'); }
@@ -31,9 +65,23 @@ let nextId = 1; const pending = new Map(); const waiters = [];
 ws.addEventListener('message', ev => {
   const msg = JSON.parse(ev.data);
   if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
+  // A dialog (YouTube's "leave the page?") stops the page, and every call to it would wait for ever: accepted, and said.
+  else if (msg.method === 'Page.javascriptDialogOpening') {
+    console.log(`.... a dialog, accepted: ${msg.params.type} ${JSON.stringify(msg.params.message)}`);
+    send('Page.handleJavaScriptDialog', { accept: true });
+  }
   else if (msg.method) for (const w of [...waiters]) if (w.method === msg.method) { waiters.splice(waiters.indexOf(w), 1); w.resolve(msg); }
 });
-const send = (method, params = {}) => new Promise(r => { const id = nextId++; pending.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
+// A call the page never answers ends the check, saying which, rather than hold it until the deadline.
+const send = (method, params = {}) => new Promise(r => {
+  const id = nextId++;
+  const unanswered = setTimeout(() => {
+    console.log(`FAIL no answer in 90 s to ${method} ${JSON.stringify(params).slice(0, 200)}`);
+    process.exit(1);
+  }, 90000);
+  pending.set(id, msg => { clearTimeout(unanswered); r(msg); });
+  ws.send(JSON.stringify({ id, method, params }));
+});
 const waitFor = (method, ms = 20000) => Promise.race([new Promise(resolve => waiters.push({ method, resolve })), sleep(ms)]);
 const evaluate = async expr => (await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true })).result?.result?.value;
 const key = async (type, k, code, vk, modifiers = 0, text) =>
@@ -147,18 +195,22 @@ check('togglePlay again resumes it', s.video?.paused === false && s.posted.some(
 // 3a'. The strip's fullscreen button: the host dispatches ytpip-fullscreen through the DevTools protocol as the user's
 // gesture, and the page clicks YouTube's own button. Without the gesture (all a posted message could do) the page may
 // not go fullscreen. First past the 5 s an earlier trusted input's activation lasts.
+// Since Edge 157 the page must be the focused one too, before it asks, or it is refused whatever the gesture: the
+// press was on the strip, so the host gives the page the keyboard first (Page.bringToFront stands in for that here;
+// asking first and focusing after, as the host did, is refused).
 const fullscreenElement = () => evaluate(`document.fullscreenElement?.tagName ?? null`);
 await sleep(5500);
 await evaluate(`window.dispatchEvent(new Event('ytpip-fullscreen'))`); await sleep(1500);
 const ungestured = await fullscreenElement();
 check('fullscreen: not without the gesture', ungestured === null, ungestured);
+await send('Page.bringToFront'); await sleep(300);
 await send('Runtime.evaluate', { expression: `window.dispatchEvent(new Event('ytpip-fullscreen'))`, userGesture: true });
 await sleep(1500);
 const full = await fullscreenElement();
 check("fullscreen: the strip's button puts the page fullscreen", full !== null, full);
 await evaluate(`document.exitFullscreen().then(() => true, () => false)`); await sleep(1000);
 const left = await fullscreenElement();
-check('fullscreen: and it leaves', left === null, left);
+check('fullscreen: and it leaves', full !== null && left === null, { full, left });
 // The host resizes the window within WebView2's fullscreen event, so the page grows while it is still switching.
 // YouTube can measure the player in that instant and keep its tiny controls (a 100px bar) on the whole screen;
 // the page has YouTube measure it again. Here the viewport grows as the button is clicked, which gave that every
@@ -526,6 +578,8 @@ tipAt = await evaluate(tipBox);
 check('tooltips: and draws one', tipAt?.text === 'Back to the previous page' && tipAt.shown && tipAt.left >= 4, tipAt);
 check('elsewhere: nothing else of the script runs', await evaluate(`!document.getElementById('ytpip-style') && !window.__posted.some(m => 'ready' in m)`));
 
-ws.close(); proc.kill();
+clearTimeout(watchdog);
+ws.close();
+await closeBrowser();
 console.log(failures ? `${failures} FAILED` : 'ALL PASSED');
 process.exit(failures ? 1 : 0);
