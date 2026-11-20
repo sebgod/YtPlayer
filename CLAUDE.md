@@ -14,16 +14,20 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   X11, the platforms with a web view backend, so the pointer and the hit test land in the tree's pixels as they
   are. The tests paint it into DIR.Lib's `RgbaImageRenderer` and ask the regions.
   Each button declares a tooltip (`PipChrome.Tooltip`: its name, what a press does in the state it is in, its key),
-  DIR.Lib's router says which is due once the pointer has rested, and the chrome paints it last (`Builder.Tooltip`).
-  The web view covers everything under the strip, so the tooltip opens beside its button, inside the strip, and
-  `InStrip` keeps it to one line there; the wording is short enough for the narrowest window, which a test holds it to.
-- `Scripts/yt-tweaks.js` runs at document start on every page (`INativeWebView.AddScriptAtDocumentStartAsync`):
+  and DIR.Lib's router says which is due once the pointer has rested. A tooltip belongs under its button, and the
+  web view covers everything under the strip, so the page draws it: the host sends `{tip}` (the text, and the
+  button's middle from the page's left edge) and the script draws it at the page's top, on any page, not only
+  YouTube's. A document says when it can (`{tips}`: true as it starts, false as it goes); without that word, and
+  folded, the chrome paints the tooltip itself (`Builder.Tooltip`), beside its button, inside the strip, where
+  `InStrip` keeps it to one line; the wording is short enough for the narrowest window, which a test holds it to.
+- `Scripts/yt-tweaks.js` runs at document start on every page (`INativeWebView.AddScriptAtDocumentStartAsync`),
+  and but for the strip's tooltips does nothing off YouTube:
   Shorts hiding, the Shorts redirect, compact mode, the hidden miniplayer, ad skipping, the help panel, and the
   Ctrl+F, Ctrl+C, Ctrl+Shift+C, Ctrl+P, Ctrl+H, Ctrl+Up/Down, Ctrl+Q, Ctrl+L, Ctrl+S, Ctrl+V and F1 keys. Host and page talk
   through `chrome.webview` messages: `{ready}`, `{showing}`, `{paste}`, `{copy}`, `{skipAt}`, `{playing}`, `{hide}`,
-  `{collapse}`, `{queueClipboard}`, `{media}`, `{help}`, `{openRelease}`, `{transcript}` from the page (read by `PageMessage`),
+  `{collapse}`, `{queueClipboard}`, `{media}`, `{help}`, `{openRelease}`, `{transcript}`, `{tips}` from the page (read by `PageMessage`),
   `{compact}`, `{search}`, `{copyLink}`, `{togglePlay}`, `{next}`, `{previous}`, `{home}`, `{queue}`, `{listQueue}`,
-  `{mediaAction}`, `{help}`, `{saveTranscript}`, `{transcriptSaved}` from the host.
+  `{mediaAction}`, `{help}`, `{saveTranscript}`, `{transcriptSaved}`, `{tip}` from the host.
 - Windows' media controls (the flyout, the lock screen, the media keys) show the player's own entry, for its window
   (`SdlVulkanWindow.TryGetMediaControls`, SdlVulkan.Renderer 7.69), named after the app id `AppIdentity.Claim`
   (AppShell 1.2) sets at start, with the Start menu shortcut that carries it. WebView2's own entry is off

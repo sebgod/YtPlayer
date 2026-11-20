@@ -60,7 +60,8 @@ To have it ready from login, put a shortcut to `ytplayer.exe --start-minimised` 
 - **Close** (`×`) quits.
 
 Rest the pointer on a button and a **tooltip** says what it is, what a press does as things are (play or pause,
-fold or unfold, whether stay on top is on), and its key. It opens beside the button, inside the strip.
+fold or unfold, whether stay on top is on), and its key. It opens under the button, over the top of the page;
+with the window folded, or while a page is still loading, beside the button, inside the strip.
 
 The taskbar icon turns red, with an equalizer in its little picture, while the video plays.
 

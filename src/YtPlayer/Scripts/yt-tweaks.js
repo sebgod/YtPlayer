@@ -1,10 +1,54 @@
-// Injected by YtPlayer at the start of every YouTube document, before YouTube's own scripts.
+// Injected by YtPlayer at the start of every document, before the page's own scripts; all of it but the strip's
+// tooltips is for YouTube's pages only.
 // It hides Shorts, opens a Short as an ordinary video, and implements compact mode (the video
 // alone, filling the window). YouTube changes its markup often: when Shorts reappear, the
 // selectors in HIDE_SHORTS are the place to look.
 (function () {
   if (window.__ytPip) return;
   window.__ytPip = true;
+
+  // The strip's tooltips, on any page, not only YouTube's. A tooltip belongs under its button, and under the strip
+  // is the page: the host cannot draw there (the web view covers it), so the page draws the tooltip of the button
+  // the pointer rests on, at its top, under that button. {tip: {text, x}} shows it, x being the button's middle in
+  // device pixels from the page's left edge; {tip: null} takes it away. The document says when it can draw one
+  // ({tips: true}) and when it is about to go ({tips: false}); without that word (a page still loading, an error
+  // page, the folded strip) the host draws the tooltip in the strip itself. The page proper only: a frame in it
+  // runs this script too.
+  function showTip(tip) {
+    var el = document.getElementById('ytpip-tip');
+    if (!tip || !document.documentElement) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'ytpip-tip';
+      // The strip's own tooltip colours (PipChrome.TooltipStyle), inline: a page that is not YouTube's gets no
+      // style sheet from this script.
+      el.style.cssText = 'position:fixed;top:4px;left:0;z-index:2147483647;box-sizing:border-box;' +
+        'max-width:calc(100vw - 8px);padding:3px 7px;border:1px solid #9090a0;border-radius:4px;' +
+        'background:rgba(12,12,16,0.96);color:#d8d8dc;font:400 12px/1.35 Roboto,"Segoe UI",Arial,sans-serif;' +
+        'white-space:normal;overflow-wrap:anywhere;pointer-events:none;';
+    }
+    el.textContent = tip.text;
+    // Last in the document, so over the help panel and the queue's list.
+    document.documentElement.appendChild(el);
+    // Centred under the button, and kept inside the page (short of its scrollbar).
+    var width = el.getBoundingClientRect().width;
+    var left = tip.x / (window.devicePixelRatio || 1) - width / 2;
+    el.style.left = Math.max(4, Math.min(left, document.documentElement.clientWidth - width - 4)) + 'px';
+  }
+  if (window.top === window) {
+    try {
+      window.chrome.webview.addEventListener('message', function (e) {
+        if (e.data && 'tip' in e.data) showTip(e.data.tip);
+      });
+      post({ tips: true });
+      window.addEventListener('pageshow', function (e) { if (e.persisted) post({ tips: true }); });
+      window.addEventListener('pagehide', function () { post({ tips: false }); });
+    } catch (e) { /* no host bridge */ }
+  }
+
   if (!/(^|\.)youtube\.com$/.test(location.hostname)) return;
 
   var HIDE_SHORTS = [
