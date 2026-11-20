@@ -203,6 +203,10 @@ internal static class Program
             UserDataFolder = PlayerSettings.WebProfileFolder,
             SystemMediaControls = media is null,
         });
+        // What the host tells the page goes through this, which sends nothing until the page has been heard from and
+        // drops what the web view refuses: a web view throws on a message it is not ready for, and a strip button
+        // pressed then took the player down.
+        var page = new PageLink(web, PlayerLog.Write);
         // The strip shows the page's title, and play or pause as the page's video does.
         string? stripTitle = null;
         var playing = false;
@@ -228,11 +232,15 @@ internal static class Program
         void TellPage(string json)
         {
             if (pageReady)
-                web.PostMessage(json);
+                page.Post(json);
         }
         // The document in the web view has said it can draw the strip's tooltips ({tips}), under the strip where the
         // host cannot; it says so again when it goes. Until it has, the strip draws them itself.
         var pageTips = false;
+        // Running from the first page being asked for until the page is heard from. A web view that has not come up
+        // a quarter of a minute on is not coming (one started while the last player's browser was still closing has
+        // stayed grey): the log and the strip then say so, once.
+        Stopwatch? pageAsked = null;
         // Started hidden (at sign-in, --start-minimised) with Win+/ to bring it back: the page waits for the window
         // to be first shown. A loaded YouTube page costs some 300 MB in its renderer, and more on the GPU, for a
         // window nobody may open for hours; with nothing loaded the web view costs little.
@@ -244,8 +252,8 @@ internal static class Program
             deferredUrl = null;
             if (pageReady && YouTubeUrl.TryGetVideoId(url, out _, out _))
             {
-                web.PostMessage(CompactMessage(compact));
-                web.PostMessage(PlayMessage(url));
+                page.Post(CompactMessage(compact));
+                page.Post(PlayMessage(url));
             }
             else
                 web.Navigate(url);
@@ -257,6 +265,7 @@ internal static class Program
             CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
         web.MessageReceived += json => UiQueue.Enqueue(() =>
         {
+            page.Heard();
             var message = PageMessage.Parse(json);
             // The page asks for the compact state when it is ready (every full load), since a
             // document-start script cannot know it. A new document is never fullscreen, and leaving the old
@@ -266,10 +275,10 @@ internal static class Program
                 pageReady = true;
                 // Paused when the old version updated: the page pauses the video once it starts (the first page only).
                 if (resume is { Paused: true })
-                    web.PostMessage("""{"startPaused":true}""");
+                    page.Post("""{"startPaused":true}""");
                 resume = resume is null ? null : resume with { Paused = false };
                 SetFullscreen(false);
-                web.PostMessage(CompactMessage(compact));
+                page.Post(CompactMessage(compact));
             }
             if (message.Tips is { } tips)
                 pageTips = tips;
@@ -285,7 +294,7 @@ internal static class Program
             if (message.SkipAt is { } skip)
             {
                 PlayerLog.Write(adLog.SkipOffered(System.DateTime.Now, skip.X, skip.Y, canClick: OperatingSystem.IsWindows()));
-                ClickInPage(web, skip.X, skip.Y);
+                ClickInPage(page, skip.X, skip.Y);
             }
             if (message.Playing is { } p && p != playing)
             {
@@ -306,12 +315,12 @@ internal static class Program
             if (message.Collapse is { } fold)
                 SetCollapsed(fold);
             if (message.QueueClipboard)
-                QueueFromClipboard(web);
+                QueueFromClipboard(page);
             if (message.Help)
                 ShowHelp();
             // Ctrl+S: the transcript the page read, written into the Downloads folder; the page says how it went.
             if (message.Transcript is { } transcript)
-                web.PostMessage(SaveTranscript(transcript));
+                page.Post(SaveTranscript(transcript));
             // Only the release the check found, whatever the page asks.
             if (message.OpenRelease && UpdateAvailable() && !OpenURL(latest!.Url))
                 PlayerLog.Write($"the release page did not open: {GetError()}");
@@ -329,7 +338,10 @@ internal static class Program
         if (startHidden && summonable)
             deferredUrl = startUrl;
         else
+        {
             web.Navigate(startUrl);
+            pageAsked = Stopwatch.StartNew();
+        }
 
         // Whether a newer release is out, from GitHub: the help button wears a red dot while one is, and the help
         // panel says which. The answer goes to the page too, which shows it if the panel is open.
@@ -485,17 +497,17 @@ internal static class Program
                         return true;
                     case (InputModifier.Ctrl, InputKey.F):
                         web.Focus();
-                        web.PostMessage("""{"search":true}""");
+                        page.Post("""{"search":true}""");
                         return true;
                     // The page knows the video and the time; it answers with a copy message.
                     case (InputModifier.Ctrl, InputKey.C):
-                        web.PostMessage("""{"copyLink":"plain"}""");
+                        page.Post("""{"copyLink":"plain"}""");
                         return true;
                     case (InputModifier.Ctrl | InputModifier.Shift, InputKey.C):
-                        web.PostMessage("""{"copyLink":"time"}""");
+                        page.Post("""{"copyLink":"time"}""");
                         return true;
                     case (InputModifier.Ctrl, InputKey.P):
-                        web.PostMessage("""{"togglePlay":"key"}""");
+                        page.Post("""{"togglePlay":"key"}""");
                         return true;
                     case (InputModifier.Ctrl, InputKey.H):
                         Hide();
@@ -510,27 +522,27 @@ internal static class Program
                     // The queue: the strip has no pointer over a video, so Ctrl+Q queues the clipboard's link; Ctrl+L
                     // unfolds the window to show the list, which is the page's.
                     case (InputModifier.Ctrl, InputKey.Q):
-                        QueueFromClipboard(web);
+                        QueueFromClipboard(page);
                         return true;
                     case (InputModifier.Ctrl, InputKey.L):
                         SetCollapsed(false);
                         web.Focus();
-                        web.PostMessage("""{"listQueue":true}""");
+                        page.Post("""{"listQueue":true}""");
                         return true;
                     // The video's transcript, which the page reads and sends back for the host to write; its
                     // notices are the page's, so the window unfolds to show them.
                     case (InputModifier.Ctrl, InputKey.S):
                         SetCollapsed(false);
                         web.Focus();
-                        web.PostMessage("""{"saveTranscript":true}""");
+                        page.Post("""{"saveTranscript":true}""");
                         return true;
                     // YouTube's own keys for the next and previous videos, which the page takes itself; on the strip
                     // they do what its buttons do.
                     case (InputModifier.Shift, InputKey.N):
-                        web.PostMessage("""{"next":true}""");
+                        page.Post("""{"next":true}""");
                         return true;
                     case (InputModifier.Shift, InputKey.P):
-                        web.PostMessage("""{"previous":true}""");
+                        page.Post("""{"previous":true}""");
                         return true;
                     case (InputModifier.None, InputKey.F1):
                         ShowHelp();
@@ -565,7 +577,7 @@ internal static class Program
             if (tip != tipSent)
             {
                 tipSent = tip;
-                web.PostMessage(tip ?? """{"tip":null}""");
+                page.Post(tip ?? """{"tip":null}""");
             }
             chrome.Render(State(), inPage ? null : due);
             router.AfterPaint();
@@ -575,26 +587,28 @@ internal static class Program
             switch (button)
             {
                 case PipButton.Back:
-                    _ = web.ExecuteScriptAsync("history.back()");
+                    page.Run("history.back()");
                     break;
                 case PipButton.Home:
-                    web.PostMessage("""{"home":true}""");
+                    // With no page to tell (the web view not up yet, or never), a load of it.
+                    if (!page.Post("""{"home":true}"""))
+                        web.Navigate(YouTubeUrl.Home);
                     break;
                 case PipButton.Previous:
-                    web.PostMessage("""{"previous":true}""");
+                    page.Post("""{"previous":true}""");
                     break;
                 case PipButton.PlayPause:
-                    web.PostMessage("""{"togglePlay":true}""");
+                    page.Post("""{"togglePlay":true}""");
                     break;
                 case PipButton.Next:
-                    web.PostMessage("""{"next":true}""");
+                    page.Post("""{"next":true}""");
                     break;
                 case PipButton.Collapse:
                     SetCollapsed(!collapsed);
                     break;
                 case PipButton.Compact:
                     compact = !compact;
-                    web.PostMessage(CompactMessage(compact));
+                    page.Post(CompactMessage(compact));
                     break;
                 case PipButton.Pin:
                     onTop = !onTop;
@@ -615,10 +629,8 @@ internal static class Program
                     // fullscreen, whatever the gesture, and the press left the keyboard on the strip.
                     SetCollapsed(false);
                     web.Focus();
-                    web.CallDevToolsProtocolMethodAsync("Runtime.evaluate",
-                            """{"expression":"window.dispatchEvent(new Event('ytpip-fullscreen'))","userGesture":true}""")
-                        .ContinueWith(t => PlayerLog.Write($"fullscreen: the press did not reach the page: {t.Exception?.GetBaseException().Message}"),
-                            CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                    page.Protocol("Runtime.evaluate",
+                        """{"expression":"window.dispatchEvent(new Event('ytpip-fullscreen'))","userGesture":true}""");
                     break;
                 case PipButton.Close:
                     stopReason = "the strip's close button";
@@ -640,6 +652,7 @@ internal static class Program
             {
                 deferredUrl = null;
                 web.Navigate(url);
+                pageAsked ??= Stopwatch.StartNew();
             }
             window.Activate();
             if (!collapsed)
@@ -687,6 +700,17 @@ internal static class Program
                     web.Focus();
                 any = true;
             }
+            if (pageAsked is { } asked && (page.Up || asked.Elapsed > TimeSpan.FromSeconds(15)))
+            {
+                pageAsked = null;
+                if (!page.Up)
+                {
+                    PlayerLog.Write("the web view has not come up, 15 s after its first page was asked for");
+                    stripTitle = "No page came up: close YtPlayer and start it again";
+                    window.SetTitle(stripTitle);
+                    any = true;
+                }
+            }
             // A tooltip came due while the pointer rested: nothing else asks for the frame that shows it.
             if (any || router.TooltipNeedsFrame)
                 loop.RequestRedraw();
@@ -708,7 +732,7 @@ internal static class Program
         // The media flyout's buttons and the media keys: the page does what the browser would have done with them,
         // YouTube's own handlers first.
         if (media is not null)
-            loop.OnMediaButton = button => web.PostMessage(MediaActionMessage(button));
+            loop.OnMediaButton = button => page.Post(MediaActionMessage(button));
 
         // Folded when the old version updated: folded again, the page loading behind the strip.
         if (resume is { Collapsed: true })
@@ -759,27 +783,23 @@ internal static class Program
     // script's click() is not: YouTube's ad Skip button ignores those. Sent as the DevTools protocol's
     // input events, all three from here, the UI thread, as WebView2 requires; they arrive in order.
     // WebKitGTK has no such protocol, so on Linux an ad's Skip waits for the viewer.
-    private static void ClickInPage(INativeWebView web, double x, double y)
+    private static void ClickInPage(PageLink page, double x, double y)
     {
         if (!OperatingSystem.IsWindows())
             return;
         var at = $"\"x\":{x.ToString(CultureInfo.InvariantCulture)},\"y\":{y.ToString(CultureInfo.InvariantCulture)}";
-        Task.WhenAll(
-                web.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent", $"{{\"type\":\"mouseMoved\",{at}}}"),
-                web.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
-                    $"{{\"type\":\"mousePressed\",{at},\"button\":\"left\",\"clickCount\":1}}"),
-                web.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
-                    $"{{\"type\":\"mouseReleased\",{at},\"button\":\"left\",\"clickCount\":1}}"))
-            .ContinueWith(t => PlayerLog.Write($"ad: the Skip click failed: {t.Exception?.GetBaseException().Message}"),
-                CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+        // A step the page does not take is logged by the link (once), and the next ones go no further.
+        _ = page.Protocol("Input.dispatchMouseEvent", $"{{\"type\":\"mouseMoved\",{at}}}")
+            && page.Protocol("Input.dispatchMouseEvent", $"{{\"type\":\"mousePressed\",{at},\"button\":\"left\",\"clickCount\":1}}")
+            && page.Protocol("Input.dispatchMouseEvent", $"{{\"type\":\"mouseReleased\",{at},\"button\":\"left\",\"clickCount\":1}}");
     }
 
     // Ctrl+Q with no video under the pointer: the video whose link is on the clipboard goes to the page's queue
     // (null tells the page there was none). A link the way Ctrl+V takes one, a bare id not.
-    private static void QueueFromClipboard(INativeWebView web)
+    private static void QueueFromClipboard(PageLink page)
     {
         var id = YouTubeUrl.VideoIdFromPastedLink(GetClipboardText());
-        web.PostMessage(id is null ? """{"queue":null}""" : $$"""{"queue":"{{id}}"}""");
+        page.Post(id is null ? """{"queue":null}""" : $$"""{"queue":"{{id}}"}""");
     }
 
     // Ctrl+S: the transcript goes into the Downloads folder as a text file, and the answer to the page says where
