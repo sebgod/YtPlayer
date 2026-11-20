@@ -57,6 +57,13 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   without the player's token), so do not go back to one. The page sends `{transcript}` (the video, the language, the
   lines), and the host (`PageTranscript`) writes `Title [id].txt` into the Downloads folder
   (SDL's `GetUserFolder`) and answers `{transcriptSaved}`: the page names no path, and the id must be a video's.
+- What the host tells the page goes through `PageLink` (`Post`, `Run`, `Protocol`), never the web view directly: a web
+  view throws on a message, a script or a protocol call until its view is up, and these come from button presses,
+  where a throw ends the player (0.1.24: Home, in a window whose web view never came up). The link sends nothing
+  until the page has been heard from and logs what the view refuses. A web view that has not come up 15 s after its
+  first page was asked for is said so, in the log and on the strip; a player started while the last one's browser is
+  still closing (some eight seconds after it quits) can end up there, which wants a fix in the web view itself (its
+  failed start is not reported, so nothing here can try again).
 - Help (the strip's `?`, F1) is a panel in the page: the host sends `{help}` (`Program.HelpMessage`: the version,
   the update check's word, whether Win+/ is ours) and the script draws it, with the list of keys, which is the
   script's to keep in step with the keys. `UpdateCheck` asks GitHub's `releases/latest` at start once its last answer

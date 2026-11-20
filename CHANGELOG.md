@@ -3,6 +3,18 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
+## Unreleased
+
+- **A strip button no longer takes the player down when there is no page.** Pressed in a window whose web view had
+  not come up, Home crashed the player (after an update to 0.1.24, the window grey): the web view refuses a message
+  until its view is up, by throwing. Back, play/pause, next, previous, compact, fullscreen, the strip's keys and the
+  media keys could have gone the same way. What the host tells the page now waits until the page has been heard
+  from, and what the web view still refuses is logged and dropped; Home, with no page to tell, loads YouTube.
+- **A window whose page never comes up says so**: after 15 seconds the strip reads "No page came up: close YtPlayer
+  and start it again", and the log has a line. A player started within a few seconds of the last one quitting can
+  land there: the last one's browser is still closing (for some eight seconds), the new web view joins it, and
+  the page then comes up late or, now and then, not at all. That is not fixed here.
+
 ## 0.1.24 (2026-11-20)
 
 - **The strip's buttons have tooltips** (#33): rest the pointer on one and it says what the button is, what a press
