@@ -63,6 +63,16 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
     private static readonly RGBAColor32 Ink = new(0xd8, 0xd8, 0xdc, 0xff);
     private static readonly RGBAColor32 TitleInk = new(0xb4, 0xb4, 0xbc, 0xff);
     private static readonly RGBAColor32 Accent = new(0xff, 0x30, 0x30, 0xff);
+    // A button's tooltip: darker than the strip in either state, with an edge that shows against both.
+    private static readonly Layout.TooltipStyle TooltipStyle = new(
+        Background: new RGBAColor32(0x0c, 0x0c, 0x10, 0xff), Text: Ink, Border: new RGBAColor32(0x90, 0x90, 0xa0, 0xff),
+        FontSize: TitleSize)
+    {
+        // The strip is all the room there is (the web view covers the rest), so the box keeps close to its edges.
+        Margin = 2,
+    };
+    // Design units a tooltip's box is allowed over what its text measures as one piece.
+    private const float TooltipSlack = 4;
 
     // Design units, mapped to pixels by the measure context.
     private const float StripHeight = 28;
@@ -101,13 +111,75 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
     /// the window follows (WebView2's). Without it, hide sits beside close.</summary>
     public bool CanFullscreen { get; init; } = true;
 
-    /// <summary>Paints the tree over the whole surface, binding the presses to where it drew.</summary>
-    public void Render(ChromeState state)
+    /// <summary>Whether Win+/ is the player's, to bring a hidden window back: what the hide button's tooltip
+    /// promises. Without it the button only minimizes.</summary>
+    public bool CanSummon { get; init; }
+
+    /// <summary>Paints the tree over the whole surface, binding the presses to where it drew, and over it the
+    /// <paramref name="tooltip"/> that is due (the router's: the pointer has rested on a button), if any.</summary>
+    /// <remarks>The tooltip opens beside its button, inside the strip, on one line: the web view covers everything
+    /// under the strip, and folded there is nothing under it, so a second line would be cut (<see cref="InStrip"/>).
+    /// With no font there is no text to show.</remarks>
+    public void Render(ChromeState state, TooltipRequest? tooltip = null)
     {
         _painted = state;
         BeginFrame();
         RenderLayout(Build(state), new RectF32(0, 0, Renderer.Width, Renderer.Height), drawFill: DrawFill);
+        if (tooltip is not { } due || FontPath.Length == 0 || state.Mode == PipMode.Fullscreen)
+            return;
+        // The box one line of the text needs: the text, its padding and border, and a little over, as the painter
+        // measures the text word by word.
+        var line = MeasureLayout(B.Text(due.Text, TooltipStyle.FontSize, TooltipStyle.Text).WAuto(),
+            new Layout.Size<float>(float.MaxValue, float.MaxValue)).Width;
+        var box = line + Scale.ToSurface(2 * (TooltipStyle.PadX + TooltipStyle.BorderWidth) + TooltipSlack);
+        RenderLayout(B.Tooltip(InStrip(due, Renderer.Width, box, Scale.ToSurface(TooltipStyle.Margin)), TooltipStyle),
+            new RectF32(0, 0, Renderer.Width, Scale.ToSurface(StripHeight)));
     }
+
+    /// <summary>Where a tooltip goes so that one line of it fits in the strip: beside its button on the side it
+    /// names; else on the other side; else from the strip's edge on the side it names, over the button as far as
+    /// it must (a window narrower, or a font wider, than the wording was written for). The engine alone would wrap
+    /// it at the room beside the button, and the strip has no second line. All in pixels.</summary>
+    internal static TooltipRequest InStrip(TooltipRequest due, float stripWidth, float boxWidth, float margin)
+    {
+        // Beside the button: the gap to it, and the margin kept from the strip's edge.
+        var left = due.Anchor.X - 2 * margin;
+        var right = stripWidth - due.Anchor.Right - 2 * margin;
+        var opensLeft = due.Side == Layout.DockSide.Left;
+        if (boxWidth <= (opensLeft ? left : right))
+            return due;
+        if (boxWidth <= (opensLeft ? right : left))
+            return due with { Side = opensLeft ? Layout.DockSide.Right : Layout.DockSide.Left };
+        // Against the strip's edge: opening right from its left end, or left from its right end.
+        return opensLeft
+            ? due with { Anchor = new RectF32(0, due.Anchor.Y, 0, due.Anchor.Height), Side = Layout.DockSide.Right }
+            : due with { Anchor = new RectF32(stripWidth, due.Anchor.Y, 0, due.Anchor.Height), Side = Layout.DockSide.Left };
+    }
+
+    /// <summary>What a button's tooltip says: its name, what a press does as things are, and its key if it has
+    /// one. The keys are the page script's and the host's; the help panel and the README list them too. Short
+    /// enough for one line beside the button in the narrowest window (<see cref="WindowFit.PipMinimum"/>).</summary>
+    internal static string Tooltip(PipButton button, ChromeState state, bool canSummon) => button switch
+    {
+        PipButton.Back => "Back to the previous page",
+        PipButton.Home => "YouTube home; the video plays on",
+        PipButton.Previous => "Previous, or start over (Shift+P)",
+        PipButton.PlayPause => state.Playing ? "Pause (Ctrl+P)" : "Play (Ctrl+P)",
+        PipButton.Next => "Next video (Shift+N)",
+        PipButton.Collapse => state.Mode == PipMode.Collapsed ? "Unfold (Ctrl+Down)" : "Fold up (Ctrl+Up)",
+        PipButton.Compact => state switch
+        {
+            // What a press does, as play and fold say it; with compact on and no video to show alone, that it is on.
+            { Compact: true, Showing: true } => "Show the whole page",
+            { Compact: true } => "Compact: on (no video)",
+            _ => "Show only the video",
+        },
+        PipButton.Pin => state.OnTop ? "Stay on top: on" : "Stay on top: off",
+        PipButton.Help => state.Update ? "Help (F1): an update is out" : "Help and keys (F1)",
+        PipButton.Hide => canSummon ? "Hide; Win+/ brings it back (Ctrl+H)" : "Minimize (Ctrl+H)",
+        PipButton.Fullscreen => "Fullscreen (F)",
+        _ => "Close YtPlayer",
+    };
 
     /// <summary>Where the web view goes in a surface of this size, in pixels: the tree's web leaf, arranged as
     /// the next paint will arrange it. Empty while collapsed, when there is no page to show.</summary>
@@ -160,41 +232,44 @@ internal sealed class PipChrome<TSurface>(Renderer<TSurface> renderer) : PixelWi
         => B.HStack([
                 // The page's, in strokes. Back is a browser's arrow, not a triangle, which beside play would read as
                 // play's reverse.
-                Button(PipButton.Back, B.Fill(MarkSize, MarkSize, BackMark)),
-                Button(PipButton.Home, B.Fill(MarkSize, MarkSize, HomeMark)),
+                Button(state, PipButton.Back, B.Fill(MarkSize, MarkSize, BackMark)),
+                Button(state, PipButton.Home, B.Fill(MarkSize, MarkSize, HomeMark)),
                 B.Spacer().ColW(GroupGap),
                 // The video's: filled. The previous video, next's mirror: a bar against a triangle.
-                Button(PipButton.Previous,
+                Button(state, PipButton.Previous,
                     B.HStack(B.Box(2.25f, 8, Ink), B.Icon(Layout.IconKind.CaretLeft, 8, Ink)).WithGap(0.5f)),
                 // What a press does: two bars while playing, a triangle while paused.
-                Button(PipButton.PlayPause, state.Playing
+                Button(state, PipButton.PlayPause, state.Playing
                     ? B.HStack(B.Box(2.75f, MarkSize, Ink), B.Box(2.75f, MarkSize, Ink)).WithGap(2.5f)
                     : B.Icon(Layout.IconKind.CaretRight, MarkSize, Ink)),
                 // The next video: a triangle against a bar.
-                Button(PipButton.Next,
+                Button(state, PipButton.Next,
                     B.HStack(B.Icon(Layout.IconKind.CaretRight, 8, Ink), B.Box(2.25f, 8, Ink)).WithGap(0.5f)),
                 Title(state.Title),
                 // Up folds the window to the strip, down unfolds it.
-                Button(PipButton.Collapse, B.Icon(
+                Button(state, PipButton.Collapse, B.Icon(
                     state.Mode == PipMode.Collapsed ? Layout.IconKind.CaretDown : Layout.IconKind.CaretUp, 8, Ink)),
-                Button(PipButton.Compact, B.Fill(13, MarkSize, CompactMark)),
-                Button(PipButton.Pin, B.Fill(8, 8, PinMark)),
-                Button(PipButton.Help, B.Fill(MarkSize, MarkSize, HelpMark)),
-                Button(PipButton.Hide, B.Fill(MarkSize, MarkSize, HideMark)),
+                Button(state, PipButton.Compact, B.Fill(13, MarkSize, CompactMark)),
+                Button(state, PipButton.Pin, B.Fill(8, 8, PinMark)),
+                Button(state, PipButton.Help, B.Fill(MarkSize, MarkSize, HelpMark)),
+                Button(state, PipButton.Hide, B.Fill(MarkSize, MarkSize, HideMark)),
                 .. CanFullscreen
-                    ? new[] { Button(PipButton.Fullscreen, B.Fill(MarkSize, MarkSize, FullscreenMark)) }
+                    ? new[] { Button(state, PipButton.Fullscreen, B.Fill(MarkSize, MarkSize, FullscreenMark)) }
                     : [],
-                Button(PipButton.Close, B.Fill(MarkSize, MarkSize, CloseMark))])
+                Button(state, PipButton.Close, B.Fill(MarkSize, MarkSize, CloseMark))])
             .RowH(StripHeight)
             .Clickable(new FrameHit(HitTestResult.Draggable));
 
-    // A button: its mark centred, lit while the pointer is over it.
-    private Layout.Node Button(PipButton button, Layout.Node mark)
+    // A button: its mark centred, lit while the pointer is over it, with a tooltip that opens towards the strip's
+    // middle (right of the five on the left, left of the seven on the right), where there is the most room.
+    private Layout.Node Button(ChromeState state, PipButton button, Layout.Node mark)
         => B.HStack(B.Spacer().WStar(), mark, B.Spacer().WStar())
             .Align(Layout.CrossAlign.Center)
             .ColW(ButtonWidth)
             .BgHover(button == PipButton.Close ? CloseHover : Hover)
-            .Clickable(new HitResult.ButtonHit(button.ToString()), _ => Pressed?.Invoke(button));
+            .Clickable(new HitResult.ButtonHit(button.ToString()), _ => Pressed?.Invoke(button))
+            .WithTooltip(Tooltip(button, state, CanSummon),
+                button <= PipButton.Next ? Layout.DockSide.Right : Layout.DockSide.Left);
 
     // The page's title, cut to an ellipsis to fit, between the five buttons on the left and the seven on the right
     // (whose room it keeps when there is none).

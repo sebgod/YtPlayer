@@ -63,6 +63,28 @@ public class PageMessageTests
     public void QueueClipboardAsksForTheClipboardsVideo()
         => PageMessage.Parse("""{"queueClipboard":true}""").QueueClipboard.ShouldBeTrue();
 
+    [Theory]
+    [InlineData("""{"tips":true}""", true)]
+    [InlineData("""{"tips":false}""", false)]
+    public void TipsSaysWhetherTheDocumentCanDrawTheStripsTooltips(string json, bool tips)
+        => PageMessage.Parse(json).Tips.ShouldBe(tips);
+
+    [Fact]
+    public void AnythingElseSaysNothingOfTooltips()
+    {
+        PageMessage.Parse("""{"playing":true}""").Tips.ShouldBeNull();
+        PageMessage.Parse("""{"tips":"yes"}""").Tips.ShouldBeNull();
+    }
+
+    [Fact]
+    public void ATooltipGoesToThePageWithWhereItsButtonIs()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(Program.TipMessage("Hide; Win+/ brings it back (Ctrl+H)", 405.6f));
+        var tip = doc.RootElement.GetProperty("tip");
+        tip.GetProperty("text").GetString().ShouldBe("Hide; Win+/ brings it back (Ctrl+H)");
+        tip.GetProperty("x").GetDouble().ShouldBe(406);
+    }
+
     [Fact]
     public void HideAsksForTheWindowToHide() => PageMessage.Parse("""{"hide":true}""").Hide.ShouldBeTrue();
 

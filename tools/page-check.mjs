@@ -52,7 +52,7 @@ await send('Page.enable');
 await send('Runtime.enable');
 const stub = `window.__posted = []; window.__hostListeners = [];
   window.chrome = window.chrome || {};
-  window.chrome.webview = { postMessage: m => { window.__posted.push(m); if ('media' in m) window.__media = m.media; },
+  window.chrome.webview = { postMessage: m => { window.__posted.push(m); if ('media' in m) window.__media = m.media; if ('tips' in m) window.__tips = m.tips; },
     addEventListener: (t, f) => window.__hostListeners.push(f) };
   window.__host = d => window.__hostListeners.forEach(f => f({ data: d }));`;
 await send('Page.addScriptToEvaluateOnNewDocument', { source: stub });
@@ -470,6 +470,24 @@ let again12 = false;
 for (let i = 0; i < 60 && !again12; i++) { await sleep(200); again12 = (await evaluate(`window.__posted`)).some(m => m.transcript?.id === 'jNQXAC9IVRw'); }
 check("transcript: the host's {saveTranscript} sends it too", again12);
 
+// 12b. The strip's tooltips: the host cannot draw under its strip, so the page draws the one that is due at its top,
+// under the button ({tip}, x the button's middle from the page's left edge), kept inside the page, and takes it away.
+const tipBox = `(() => { const t = document.getElementById('ytpip-tip'); if (!t) return null; const r = t.getBoundingClientRect(); const s = getComputedStyle(t);
+  return { text: t.textContent, top: r.top, left: r.left, right: r.right, middle: r.left + r.width / 2, height: r.height, shown: s.display !== 'none' && s.visibility === 'visible' && r.width > 0,
+    passes: s.pointerEvents === 'none', last: t === document.documentElement.lastElementChild, page: document.documentElement.clientWidth, dpr: devicePixelRatio }; })()`;
+check('tooltips: the document says it can draw them', await evaluate(`window.__tips === true`));
+await evaluate(`window.__host({ tip: { text: 'Pause (Ctrl+P)', x: 104 } })`); await sleep(100);
+let tipAt = await evaluate(tipBox);
+check("tooltips: {tip} draws it at the page's top, under the button",
+  tipAt?.text === 'Pause (Ctrl+P)' && tipAt.shown && tipAt.top >= 0 && tipAt.top <= 8 && Math.abs(tipAt.middle - 104 / tipAt.dpr) <= 1, tipAt);
+check('tooltips: over everything else, and the pointer goes through it', tipAt?.last === true && tipAt?.passes === true && tipAt?.height < 30, tipAt);
+await evaluate(`window.__host({ tip: { text: 'Hide; Win+/ brings it back (Ctrl+H)', x: innerWidth * devicePixelRatio - 3 } })`); await sleep(100);
+tipAt = await evaluate(tipBox);
+check('tooltips: one near the edge stays inside the page', tipAt?.right <= tipAt?.page - 4 + 0.5 && tipAt?.left >= 4, tipAt);
+check('tooltips: there is only ever one', await evaluate(`document.querySelectorAll('#ytpip-tip').length === 1`));
+await evaluate(`window.__host({ tip: null })`); await sleep(100);
+check('tooltips: {tip: null} takes it away', await evaluate(tipBox) === null);
+
 // 13. Ctrl+Q over a thumbnail YouTube's hover preview covers (a search's results): the preview player is not in the
 // tile, and the video under it is still the one queued.
 await send('Page.navigate', { url: 'https://www.youtube.com/results?search_query=depeche+mode' });
@@ -496,6 +514,17 @@ if (thumb) {
   check('queue: Ctrl+Q over a thumbnail under its hover preview queues that video',
     !s.posted.some(m => m.queueClipboard) && /^Queued/.test(said), { covered, said, posted: s.posted });
 } else check('queue: a search result to point at', false);
+
+// 14. A page that is not YouTube's (a sign-in page, anything a link leads to) draws the tooltips too, and nothing else
+// of the script runs there; leaving a document says the tooltips go with it.
+await evaluate(`window.__tips = undefined`);
+send('Page.navigate', { url: 'https://example.com/' });
+await waitFor('Page.loadEventFired'); await sleep(1500);
+check("tooltips: a page that is not YouTube's says it can draw them", await evaluate(`window.__tips === true`));
+await evaluate(`window.__host({ tip: { text: 'Back to the previous page', x: 14 } })`); await sleep(100);
+tipAt = await evaluate(tipBox);
+check('tooltips: and draws one', tipAt?.text === 'Back to the previous page' && tipAt.shown && tipAt.left >= 4, tipAt);
+check('elsewhere: nothing else of the script runs', await evaluate(`!document.getElementById('ytpip-style') && !window.__posted.some(m => 'ready' in m)`));
 
 ws.close(); proc.kill();
 console.log(failures ? `${failures} FAILED` : 'ALL PASSED');

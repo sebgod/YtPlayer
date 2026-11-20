@@ -185,6 +185,7 @@ internal static class Program
         var chrome = new PipChrome<VulkanContext>(renderer)
         {
             FontPath = TitleFont() ?? "", DpiScale = window.DisplayScale, CanFullscreen = OperatingSystem.IsWindows(),
+            CanSummon = summonable,
         };
 
         // Window points are pixels on Windows and X11, the platforms with a web view backend, so SDL's hit test
@@ -229,6 +230,9 @@ internal static class Program
             if (pageReady)
                 web.PostMessage(json);
         }
+        // The document in the web view has said it can draw the strip's tooltips ({tips}), under the strip where the
+        // host cannot; it says so again when it goes. Until it has, the strip draws them itself.
+        var pageTips = false;
         // Started hidden (at sign-in, --start-minimised) with Win+/ to bring it back: the page waits for the window
         // to be first shown. A loaded YouTube page costs some 300 MB in its renderer, and more on the GPU, for a
         // window nobody may open for hours; with nothing loaded the web view costs little.
@@ -267,6 +271,8 @@ internal static class Program
                 SetFullscreen(false);
                 web.PostMessage(CompactMessage(compact));
             }
+            if (message.Tips is { } tips)
+                pageTips = tips;
             if (message.Showing is { } on)
                 ShowCompact(on);
             // Ctrl+V outside a text field: a YouTube link opens; anything else on the clipboard is left alone.
@@ -541,9 +547,27 @@ internal static class Program
         IPixelWidget[] widgets = [chrome];
         var router = new InputRouter(chrome.Ui, new BackgroundTaskTracker(), loop.RequestRedraw) { Widgets = () => widgets };
         loop.OnPointerInput = evt => evt is not InputEvent.MouseDown { Button: not MouseButton.Left } && router.Handle(evt);
+        // The tooltip of the button the pointer has rested on, once the router's delay has run out. It belongs under
+        // the button, which is the page's to draw ({tip}: the web view covers everything under the strip). Folded,
+        // or with a document that has not said it can (still loading, an error page), the strip draws it itself,
+        // beside the button.
+        string? tipSent = null;
         loop.OnRender = () =>
         {
-            chrome.Render(State());
+            var due = router.Tooltip;
+            var inPage = pageTips && !collapsed && !fullscreen;
+            string? tip = null;
+            if (inPage && due is { } d)
+            {
+                window.GetSizeInPixels(out var w, out var h);
+                tip = TipMessage(d.Text, d.Anchor.X + d.Anchor.Width / 2 - chrome.WebViewBounds(State(), w, h).UpperLeft.X);
+            }
+            if (tip != tipSent)
+            {
+                tipSent = tip;
+                web.PostMessage(tip ?? """{"tip":null}""");
+            }
+            chrome.Render(State(), inPage ? null : due);
             router.AfterPaint();
         };
         chrome.Pressed = button =>
@@ -660,7 +684,8 @@ internal static class Program
                     web.Focus();
                 any = true;
             }
-            if (any)
+            // A tooltip came due while the pointer rested: nothing else asks for the frame that shows it.
+            if (any || router.TooltipNeedsFrame)
                 loop.RequestRedraw();
         };
 
@@ -767,6 +792,23 @@ internal static class Program
         => GetUserFolder(Folder.Downloads) is { Length: > 0 } folder
             ? folder
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+
+    // {tip}: the page draws a strip button's tooltip at its top, under the button: x is the button's middle, in pixels
+    // from the page's left edge.
+    internal static string TipMessage(string text, float x)
+    {
+        var buffer = new MemoryStream();
+        using (var json = new Utf8JsonWriter(buffer))
+        {
+            json.WriteStartObject();
+            json.WriteStartObject("tip");
+            json.WriteString("text", text);
+            json.WriteNumber("x", MathF.Round(x));
+            json.WriteEndObject();
+            json.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+    }
 
     // {transcriptSaved}: the file the transcript was written to and the folder it is in, by name, for the page's
     // notice; null when it was not written.
