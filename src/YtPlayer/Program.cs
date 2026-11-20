@@ -185,6 +185,7 @@ internal static class Program
         var chrome = new PipChrome<VulkanContext>(renderer)
         {
             FontPath = TitleFont() ?? "", DpiScale = window.DisplayScale, CanFullscreen = OperatingSystem.IsWindows(),
+            CanSummon = summonable,
         };
 
         // Window points are pixels on Windows and X11, the platforms with a web view backend, so SDL's hit test
@@ -541,9 +542,10 @@ internal static class Program
         IPixelWidget[] widgets = [chrome];
         var router = new InputRouter(chrome.Ui, new BackgroundTaskTracker(), loop.RequestRedraw) { Widgets = () => widgets };
         loop.OnPointerInput = evt => evt is not InputEvent.MouseDown { Button: not MouseButton.Left } && router.Handle(evt);
+        // With the tooltip of the button the pointer has rested on, once the router's delay has run out.
         loop.OnRender = () =>
         {
-            chrome.Render(State());
+            chrome.Render(State(), router.Tooltip);
             router.AfterPaint();
         };
         chrome.Pressed = button =>
@@ -660,7 +662,8 @@ internal static class Program
                     web.Focus();
                 any = true;
             }
-            if (any)
+            // A tooltip came due while the pointer rested: nothing else asks for the frame that shows it.
+            if (any || router.TooltipNeedsFrame)
                 loop.RequestRedraw();
         };
 

@@ -13,6 +13,10 @@ A picture-in-picture YouTube player on SdlVulkan.Renderer (SDL3 + Vulkan) and Sd
   draws in their arranged rects. No scale arithmetic outside the tree: window points are pixels on Windows and
   X11, the platforms with a web view backend, so the pointer and the hit test land in the tree's pixels as they
   are. The tests paint it into DIR.Lib's `RgbaImageRenderer` and ask the regions.
+  Each button declares a tooltip (`PipChrome.Tooltip`: its name, what a press does in the state it is in, its key),
+  DIR.Lib's router says which is due once the pointer has rested, and the chrome paints it last (`Builder.Tooltip`).
+  The web view covers everything under the strip, so the tooltip opens beside its button, inside the strip, and
+  `InStrip` keeps it to one line there; the wording is short enough for the narrowest window, which a test holds it to.
 - `Scripts/yt-tweaks.js` runs at document start on every page (`INativeWebView.AddScriptAtDocumentStartAsync`):
   Shorts hiding, the Shorts redirect, compact mode, the hidden miniplayer, ad skipping, the help panel, and the
   Ctrl+F, Ctrl+C, Ctrl+Shift+C, Ctrl+P, Ctrl+H, Ctrl+Up/Down, Ctrl+Q, Ctrl+L, Ctrl+S, Ctrl+V and F1 keys. Host and page talk

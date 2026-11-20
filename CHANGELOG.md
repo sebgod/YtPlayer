@@ -3,6 +3,13 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
+## Unreleased
+
+- **The strip's buttons have tooltips** (#33): rest the pointer on one and it says what the button is, what a press
+  does as things are (Play or Pause, Fold up or Unfold, whether stay on top is on, that an update is out), and its
+  key. The tooltip opens beside the button, inside the strip, on one line: the page covers everything below the
+  strip, and a folded window is the strip alone.
+
 ## 0.1.23 (2026-11-20)
 
 - **Ctrl+S saves the video's transcript**, the one YouTube's "Show transcript" lists, as a text file in the Downloads

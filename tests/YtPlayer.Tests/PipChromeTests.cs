@@ -165,6 +165,182 @@ public class PipChromeTests
         Pixel(renderer, 388, 9).ShouldBe((0xff, 0x30, 0x30));
     }
 
+    // The tooltips: the router says which is due, once the pointer has rested on a button for its delay.
+    private static (PipChrome<RgbaImage> Chrome, InputRouter Router, FakeClock Clock) Hovering(
+        int width, int height, ChromeState state, float x, float y)
+    {
+        var chrome = Painted(width, height, state);
+        var clock = new FakeClock();
+        IPixelWidget[] widgets = [chrome];
+        var router = new InputRouter(chrome.Ui, new BackgroundTaskTracker(), () => { }) { Widgets = () => widgets, Clock = clock };
+        router.Handle(new InputEvent.MouseMove(x, y));
+        return (chrome, router, clock);
+    }
+
+    [Fact]
+    public void AButtonsTooltipIsDueOnceThePointerHasRested()
+    {
+        var (_, router, clock) = Hovering(480, 300, Plain, 104, 14);
+        router.Tooltip.ShouldBeNull();
+        clock.Advance(TimeSpan.FromMilliseconds(499));
+        router.Tooltip.ShouldBeNull();
+        router.TooltipNeedsFrame.ShouldBeFalse();
+        clock.Advance(TimeSpan.FromMilliseconds(1));
+        router.TooltipNeedsFrame.ShouldBeTrue(); // the loop paints a frame for it
+        var due = router.Tooltip.ShouldNotBeNull();
+        due.Text.ShouldBe("Play (Ctrl+P)");
+        due.Anchor.ShouldBe(new RectF32(90, 0, 28, 28)); // the play/pause button
+    }
+
+    [Fact]
+    public void TheTooltipFollowsWhatAPressWouldDo()
+    {
+        var (chrome, router, clock) = Hovering(480, 300, Plain, 104, 14);
+        clock.Advance(TimeSpan.FromSeconds(1));
+        router.Tooltip!.Value.Text.ShouldBe("Play (Ctrl+P)");
+        // The video plays: the next paint says pause, and that tooltip waits its own delay.
+        chrome.Render(Plain with { Playing = true });
+        router.AfterPaint();
+        router.Tooltip.ShouldBeNull();
+        clock.Advance(TimeSpan.FromSeconds(1));
+        router.Tooltip!.Value.Text.ShouldBe("Pause (Ctrl+P)");
+    }
+
+    [Fact]
+    public void TheTooltipGoesWhenThePointerLeaves()
+    {
+        var (_, router, clock) = Hovering(480, 300, Plain, 104, 14);
+        clock.Advance(TimeSpan.FromSeconds(1));
+        router.Tooltip.ShouldNotBeNull();
+        router.Handle(new InputEvent.MouseMove(200, 14)); // the strip between the buttons
+        clock.Advance(TimeSpan.FromSeconds(1));
+        router.Tooltip.ShouldBeNull();
+    }
+
+    [Fact]
+    public void ATooltipOpensTowardsTheStripsMiddle()
+    {
+        foreach (var (x, side) in new[] { (14f, Layout.DockSide.Right), (132f, Layout.DockSide.Right),
+                     (298f, Layout.DockSide.Left), (466f, Layout.DockSide.Left) })
+        {
+            var (_, router, clock) = Hovering(480, 300, Plain, x, 14);
+            clock.Advance(TimeSpan.FromSeconds(1));
+            router.Tooltip!.Value.Side.ShouldBe(side, $"at {x}");
+        }
+    }
+
+    [Theory]
+    [InlineData(PipButton.Back, "Back to the previous page")]
+    [InlineData(PipButton.Home, "YouTube home; the video plays on")]
+    [InlineData(PipButton.Previous, "Previous, or start over (Shift+P)")]
+    [InlineData(PipButton.PlayPause, "Play (Ctrl+P)")]
+    [InlineData(PipButton.Next, "Next video (Shift+N)")]
+    [InlineData(PipButton.Collapse, "Fold up (Ctrl+Up)")]
+    [InlineData(PipButton.Compact, "Show only the video")]
+    [InlineData(PipButton.Pin, "Stay on top: off")]
+    [InlineData(PipButton.Help, "Help and keys (F1)")]
+    [InlineData(PipButton.Hide, "Hide; Win+/ brings it back (Ctrl+H)")]
+    [InlineData(PipButton.Fullscreen, "Fullscreen (F)")]
+    [InlineData(PipButton.Close, "Close YtPlayer")]
+    public void ATooltipNamesTheButtonAndItsKey(PipButton button, string text)
+        => PipChrome<RgbaImage>.Tooltip(button, Plain, canSummon: true).ShouldBe(text);
+
+    [Fact]
+    public void ATooltipSaysWhatAPressDoesAsThingsAre()
+    {
+        static string Tip(PipButton button, ChromeState state, bool canSummon = true)
+            => PipChrome<RgbaImage>.Tooltip(button, state, canSummon);
+        Tip(PipButton.PlayPause, Plain with { Playing = true }).ShouldBe("Pause (Ctrl+P)");
+        Tip(PipButton.Collapse, Plain with { Mode = PipMode.Collapsed }).ShouldBe("Unfold (Ctrl+Down)");
+        Tip(PipButton.Compact, Plain with { Compact = true, Showing = true }).ShouldBe("Show the whole page");
+        Tip(PipButton.Compact, Plain with { Compact = true }).ShouldBe("Compact: on (no video)");
+        Tip(PipButton.Pin, Plain with { OnTop = true }).ShouldBe("Stay on top: on");
+        Tip(PipButton.Help, Plain with { Update = true }).ShouldBe("Help (F1): an update is out");
+        // Without Win+/ the button only minimizes, and promises no more.
+        Tip(PipButton.Hide, Plain, canSummon: false).ShouldBe("Minimize (Ctrl+H)");
+    }
+
+    // The strip is one line tall, so a tooltip is one line: where it has the room.
+    [Fact]
+    public void ATooltipStaysBesideItsButtonWhereOneLineFits()
+    {
+        var left = new TooltipRequest("Fold up", new RectF32(284, 0, 28, 28)) { Side = Layout.DockSide.Left };
+        PipChrome<RgbaImage>.InStrip(left, stripWidth: 480, boxWidth: 280, margin: 2).ShouldBe(left);
+        var right = new TooltipRequest("Back", new RectF32(0, 0, 28, 28)) { Side = Layout.DockSide.Right };
+        PipChrome<RgbaImage>.InStrip(right, stripWidth: 480, boxWidth: 448, margin: 2).ShouldBe(right);
+    }
+
+    [Fact]
+    public void ATooltipWithNoRoomOnItsSideOpensOnTheOther()
+    {
+        var due = new TooltipRequest("Fold up", new RectF32(152, 0, 28, 28)) { Side = Layout.DockSide.Left };
+        // 148 to its left, 164 to its right.
+        PipChrome<RgbaImage>.InStrip(due, stripWidth: 348, boxWidth: 160, margin: 2)
+            .ShouldBe(due with { Side = Layout.DockSide.Right });
+    }
+
+    [Fact]
+    public void ATooltipWithRoomOnNeitherSideRunsFromTheStripsEdge()
+    {
+        var opensLeft = new TooltipRequest("Fold up", new RectF32(152, 0, 28, 28)) { Side = Layout.DockSide.Left };
+        PipChrome<RgbaImage>.InStrip(opensLeft, stripWidth: 348, boxWidth: 200, margin: 2)
+            .ShouldBe(opensLeft with { Anchor = new RectF32(0, 0, 0, 28), Side = Layout.DockSide.Right });
+        var opensRight = new TooltipRequest("Next video", new RectF32(118, 0, 28, 28)) { Side = Layout.DockSide.Right };
+        PipChrome<RgbaImage>.InStrip(opensRight, stripWidth: 348, boxWidth: 300, margin: 2)
+            .ShouldBe(opensRight with { Anchor = new RectF32(348, 0, 0, 28), Side = Layout.DockSide.Left });
+    }
+
+    // The wording is short enough for the narrowest window: each tooltip, whatever the state, fits beside its
+    // button on the side it names, in a face as wide as the widest the player takes (a monospaced one, each
+    // character 0.55 of its size: Windows' Consolas), with the box's padding, border and slack around it.
+    [Fact]
+    public void InTheNarrowestWindowEveryTooltipFitsBesideItsButton()
+    {
+        var width = WindowFit.PipMinimum.W;
+        float[] at = [14, 42, 76, 104, 132, width - 196 + 14, width - 168 + 14, width - 140 + 14, width - 112 + 14,
+            width - 84 + 14, width - 56 + 14, width - 14];
+        var buttons = Enum.GetValues<PipButton>();
+        var states =
+            from playing in new[] { false, true }
+            from mode in new[] { PipMode.Normal, PipMode.Collapsed }
+            from compact in new[] { (false, false), (true, false), (true, true) }
+            from onTop in new[] { false, true }
+            from update in new[] { false, true }
+            select new ChromeState(mode, Active: true, compact.Item1, compact.Item2, onTop, playing, Title: null, update);
+        foreach (var state in states)
+        {
+            for (var i = 0; i < buttons.Length; i++)
+            {
+                var (_, router, clock) = Hovering(width, mode: state, x: at[i]);
+                clock.Advance(TimeSpan.FromSeconds(1));
+                var due = router.Tooltip.ShouldNotBeNull($"{buttons[i]}");
+                var box = due.Text.Length * 12 * 0.55f + 2 * (6 + 1) + 4;
+                PipChrome<RgbaImage>.InStrip(due, width, box, margin: 2).ShouldBe(due, $"{buttons[i]}: \"{due.Text}\"");
+            }
+        }
+
+        static (PipChrome<RgbaImage>, InputRouter, FakeClock) Hovering(int width, ChromeState mode, float x)
+            => PipChromeTests.Hovering(width, mode.Mode == PipMode.Collapsed ? 32 : WindowFit.PipMinimum.H, mode, x, 14);
+    }
+
+    [Fact]
+    public void WithNoFontTheStripPaintsNoTooltip()
+    {
+        var renderer = new RgbaImageRenderer(480, 300);
+        var chrome = new PipChrome<RgbaImage>(renderer);
+        chrome.Render(Plain);
+        var plain = renderer.Surface.Pixels.ToArray();
+        chrome.Render(Plain, new TooltipRequest("Play (Ctrl+P)", new RectF32(90, 0, 28, 28)) { Side = Layout.DockSide.Right });
+        renderer.Surface.Pixels.ToArray().ShouldBe(plain);
+    }
+
+    private sealed class FakeClock : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 11, 20, 12, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => _now;
+        public void Advance(TimeSpan by) => _now += by;
+    }
+
     private static readonly ChromeState Folded = Plain with { Mode = PipMode.Collapsed };
     private static readonly PipChrome<RgbaImage> Collapsed = Painted(480, 32, Folded);
 
