@@ -3,7 +3,7 @@
 What changed in YtPlayer, newest first. A release is a `v*` tag on main, and the version comes from the tag.
 What each SdlVulkan.Renderer version brings is in that repo's own CHANGELOG.md.
 
-## Unreleased
+## 0.1.23 (2026-11-20)
 
 - **Ctrl+S saves the video's transcript**, the one YouTube's "Show transcript" lists, as a text file in the Downloads
   folder, named after the video (`Title [id].txt`): the title, the channel, the link and the transcript's language,
